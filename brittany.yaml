@@ -1,0 +1,21 @@
+conf_layout:
+  lconfig_reformatModulePreamble: true
+  lconfig_altChooser:
+    tag: AltChooserBoundedSearch
+    contents: 3
+  lconfig_allowSingleLineExportList: false
+  lconfig_importColumn: 50
+  lconfig_hangingTypeSignature: true
+  lconfig_importAsColumn: 50
+  lconfig_alignmentLimit: 30
+  lconfig_allowHangingQuasiQuotes: true
+  lconfig_indentListSpecial: true
+  lconfig_indentAmount: 2
+  lconfig_alignmentBreakOnMultiline: true
+  lconfig_experimentalSemicolonNewlines: false
+  lconfig_cols: 80
+  lconfig_indentPolicy: IndentPolicyFree
+  lconfig_indentWhereSpecial: false
+  lconfig_columnAlignMode:
+    tag: ColumnAlignModeMajority
+    contents: 0.7

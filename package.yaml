@@ -1,0 +1,54 @@
+name:                flix-lang
+version:             0.1.0.0
+github:              "mattapet/flix-lang"
+license:             BSD3
+author:              "Peter Matta"
+maintainer:          "developer@mattapet.com"
+copyright:           "2021 Peter Matta"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/mattapet/flix-lang#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- parsec
+- containers
+
+library:
+  source-dirs: src
+  ghc-options:
+  - -Wall
+
+executables:
+  flix-lang-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - flix-lang
+
+tests:
+  flix-lang-test:
+    main:                Spec.hs
+    source-dirs:         test
+    dependencies:
+    - flix-lang
+    - hspec >=2.7.8
+    - hspec-discover >=2.7.8
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
