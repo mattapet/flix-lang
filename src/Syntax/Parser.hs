@@ -1,7 +1,9 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Syntax.Parser where
+module Syntax.Parser
+  ( parse
+  ) where
 
 import           Data.Functor                   ( ($>) )
 import           Syntax.Core
