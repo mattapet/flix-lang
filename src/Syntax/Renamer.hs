@@ -21,43 +21,46 @@ rename :: AST -> Either String AST
 rename = (fst <$>) . flip runStateT empty . rename' []
 
 rename' :: Names -> AST -> Result AST
-rename' _  val@BoolLiteral{}   = return val
-rename' _  val@NumberLiteral{} = return val
+rename' ns (Expr e) = Expr <$> renameE ns e
 
-rename' ns (Identifier x)      = return $ Identifier x'
+renameE :: Names -> Expr -> Result Expr
+renameE _  val@BoolLiteral{}   = return val
+renameE _  val@NumberLiteral{} = return val
+
+renameE ns (Identifier x)      = return $ Identifier x'
   where x' = fromMaybe x $ lookup x ns
 
-rename' ns (BinOp op lhs rhs) = do
-  lhs' <- rename' ns lhs
-  rhs' <- rename' ns rhs
+renameE ns (BinOp op lhs rhs) = do
+  lhs' <- renameE ns lhs
+  rhs' <- renameE ns rhs
   return $ BinOp op lhs' rhs'
 
-rename' ns (Call callee args) = do
-  callee' <- rename' ns callee
-  args'   <- traverse (rename' ns) args
+renameE ns (Call callee args) = do
+  callee' <- renameE ns callee
+  args'   <- traverse (renameE ns) args
   return $ Call callee' args'
 
-rename' ns (Let name args body) = do
+renameE ns (Let name args body) = do
   (name' : args', body') <- renameContext
   return $ Let name' args' body'
   where
     renameContext = do
       ns'   <- renameVariables (name : args)
-      body' <- (rename' $ ns' ++ ns) body
+      body' <- (renameE $ ns' ++ ns) body
       let vars' = snd <$> ns'
       return (vars', body')
 
-rename' ns (If cond then' else') = do
-  cond'  <- rename' ns cond
-  then'' <- rename' ns then'
-  else'' <- rename' ns else'
+renameE ns (If cond then' else') = do
+  cond'  <- renameE ns cond
+  then'' <- renameE ns then'
+  else'' <- renameE ns else'
   return $ If cond' then'' else''
 
-rename' ns (Block exprs) = Block <$> renameBlock ns exprs
+renameE ns (Block exprs) = Block <$> renameBlock ns exprs
 
 -- Helper functions
 
-renameBlock :: [(Name, Name)] -> [AST] -> Result [AST]
+renameBlock :: [(Name, Name)] -> [Expr] -> Result [Expr]
 renameBlock _  [] = return []
 renameBlock ns (Let name args body : remainingBlock) = do
   (let', ns')     <- renameLet
@@ -66,13 +69,13 @@ renameBlock ns (Let name args body : remainingBlock) = do
   where
     renameLet = do
       ns'   <- renameVariables (name : args)
-      body' <- (rename' $ ns' ++ ns) body
+      body' <- (renameE $ ns' ++ ns) body
       let (name' : args') = snd <$> ns'
       let renamedLetName  = head ns'
       return (Let name' args' body', renamedLetName : ns)
 
 renameBlock ns (x : xs) = do
-  x' <- rename' ns x
+  x' <- renameE ns x
   (x' :) <$> renameBlock ns xs
 
 renameVariables :: [Name] -> Result [(Name, Name)]

@@ -13,30 +13,27 @@ spec = do
   describe "Top level expressions" $ do
     let
       testSuite =
-        [ (BoolLiteral True , Right $ BoolLiteral True)
-        , (BoolLiteral False, Right $ BoolLiteral False)
-        , (NumberLiteral 1  , Right $ NumberLiteral 1)
-        , (Identifier "x"   , Right $ Identifier "x")
+        [ (BoolLiteral True , BoolLiteral True)
+        , (BoolLiteral False, BoolLiteral False)
+        , (NumberLiteral 1  , NumberLiteral 1)
+        , (Identifier "x"   , Identifier "x")
         , ( Call (Identifier "f") [Identifier "a"]
-          , Right $ Call (Identifier "f") [Identifier "a"]
+          , Call (Identifier "f") [Identifier "a"]
           )
         , ( BinOp "+" (Identifier "x") (Identifier "y")
-          , Right $ BinOp "+" (Identifier "x") (Identifier "y")
+          , BinOp "+" (Identifier "x") (Identifier "y")
           )
-        , ( Let "x" [] (NumberLiteral 1)
-          , Right $ Let "x_$1" [] (NumberLiteral 1)
-          )
-        , ( Let "x" ["a"] (Identifier "a")
-          , Right $ Let "x_$1" ["a_$1"] (Identifier "a_$1")
+        , (Let "x" [] (NumberLiteral 1), Let "x_$1" [] (NumberLiteral 1))
+        , ( Let "x"    ["a"]    (Identifier "a")
+          , Let "x_$1" ["a_$1"] (Identifier "a_$1")
           )
         , ( Let "f" ["x"] (BinOp "+" (Identifier "x") (Identifier "x"))
-          , Right $ Let "f_$1"
-                        ["x_$1"]
-                        (BinOp "+" (Identifier "x_$1") (Identifier "x_$1"))
+          , Let "f_$1"
+                ["x_$1"]
+                (BinOp "+" (Identifier "x_$1") (Identifier "x_$1"))
           )
-        , ( Let "f" ["x"] (Call (Identifier "x") [Identifier "y"])
-          , Right
-            $ Let "f_$1" ["x_$1"] (Call (Identifier "x_$1") [Identifier "y"])
+        , ( Let "f"    ["x"]    (Call (Identifier "x") [Identifier "y"])
+          , Let "f_$1" ["x_$1"] (Call (Identifier "x_$1") [Identifier "y"])
           )
         , ( Let
             "f"
@@ -45,7 +42,7 @@ spec = do
                 (BoolLiteral True)
                 (BoolLiteral False)
             )
-          , Right $ Let
+          , Let
             "f_$1"
             ["x_$1"]
             (If (BinOp "%" (Identifier "x_$1") (NumberLiteral 0))
@@ -56,7 +53,7 @@ spec = do
         ]
     forM_ testSuite $ \(in', out) ->
       it (printf "should rename %s to %s" (show in') (show out)) $ do
-        rename in' `shouldBe` out
+        rename (Expr in') `shouldBe` Right (Expr out)
 
   describe "Block renaming" $ do
     let testSuite =
@@ -66,7 +63,7 @@ spec = do
               , Let "x" ["y", "z"] (BinOp "+" (Identifier "y") (Identifier "z"))
               , Call (Identifier "x") [Identifier "y", NumberLiteral 2]
               ]
-            , Right $ Block
+            , Block
               [ Let "x_$1" [] (NumberLiteral 1)
               , Let "y_$1" [] (BinOp "+" (NumberLiteral 2) (Identifier "x_$1"))
               , Let "x_$2"
@@ -78,7 +75,7 @@ spec = do
           ]
     forM_ testSuite $ \(in', out) ->
       it (printf "should rename %s to %s" (show in') (show out)) $ do
-        rename in' `shouldBe` out
+        rename (Expr in') `shouldBe` Right (Expr out)
 
   describe "Conflicting definitions detections" $ do
     let testSuite =
@@ -94,5 +91,5 @@ spec = do
           ]
     forM_ testSuite $ \(in', out) ->
       it (printf "should rename %s to %s" (show in') (show out)) $ do
-        rename in' `shouldBe` out
+        rename (Expr in') `shouldBe` out
 

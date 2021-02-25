@@ -58,16 +58,16 @@ number = spaces *> (positive <|> negative) <* spaces
     positive = read <$> many1 digit
     negative = negate <$> (char '-' *> positive)
 
-block :: Parsec String u AST
+block :: Parsec String u Expr
 block = Block <$> (spaces *> braces body <* spaces)
   where
     braces p = char '{' *> p <* char '}'
     body = many expr
 
-parens :: Parsec String u AST
+parens :: Parsec String u Expr
 parens = spaces *> char '(' *> expr <* char ')' <* spaces
 
-atom :: Parsec String u AST
+atom :: Parsec String u Expr
 atom = foldl1 (<|>) atoms
   where
     atoms =
@@ -81,44 +81,44 @@ atom = foldl1 (<|>) atoms
 
 -- Factors
 
-call :: Parsec String u AST
+call :: Parsec String u Expr
 call = do
   f <- Identifier <$> identifier
   many atom >>= \case
     []   -> return f
     args -> return $ Call f args
 
-factor :: Parsec String u AST
+factor :: Parsec String u Expr
 factor = foldl1 (<|>) factors
   where factors = try <$> [BoolLiteral <$> boolean, call, atom]
 
 -- Terms
 
-binop :: Parsec String u AST
+binop :: Parsec String u Expr
 binop = factor `chainl1` op
   where op = BinOp <$> (spaces *> many1 (oneOf "+-*/=<>|&") <* spaces)
 
-term :: Parsec String u AST
+term :: Parsec String u Expr
 term = foldl1 (<|>) terms where terms = try <$> [binop, factor]
 
 -- Expressions
 
-ifExpr :: Parsec String u AST
+ifExpr :: Parsec String u Expr
 ifExpr = do
   cond  <- string "if" *> term <* anySpaces
   then' <- string "then" *> term <* anySpaces
   else' <- string "else" *> term
   return $ If cond then' else'
 
-letBinding :: Parsec String u AST
+letBinding :: Parsec String u Expr
 letBinding = Let <$> (let' *> identifier) <*> args' <* char '=' <*> expr
   where
     let'  = spaces *> string "let" <* spaces
     args' = many identifier
 
-expr :: Parsec String u AST
+expr :: Parsec String u Expr
 expr = anySpaces *> (try letBinding <|> try ifExpr <|> try term) <* anySpaces
 
 parse :: String -> Either String AST
-parse = mapLeft show . runParser (expr <* eof) () ""
+parse = mapLeft show . runParser (Expr <$> expr <* eof) () ""
   where mapLeft f = either (Left . f) Right
