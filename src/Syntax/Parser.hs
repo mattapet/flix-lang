@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 
 module Syntax.Parser
   ( parse
@@ -33,24 +34,29 @@ anySpaces :: Parsec String u ()
 anySpaces = skipMany anySpace
 
 keywords :: [String]
-keywords = ["if", "then", "else", "let", "true", "false"]
+keywords = ["if", "then", "else", "let", "true", "false", "match", "case"]
 
 -- Atoms
+
+identifierChar :: Parsec String u Char
+identifierChar = alphaNum <|> oneOf "'_"
 
 identifier :: Parsec String u String
 identifier = spaces *> identifier' <* spaces
   where
-    identifier' = (:) <$> letter <*> many rest >>= failOnKeyword
+    identifier' = (:) <$> letter <*> many identifierChar >>= failOnKeyword
     failOnKeyword x | x `elem` keywords = fail ""
                     | otherwise         = return x
-    rest = alphaNum <|> oneOf "'_"
 
+underscore :: Parsec String u Expr
+underscore = spaces *> underscore' <* spaces
+  where underscore' = string "_" *> notFollowedBy identifierChar $> Underscore
 
 boolean :: Parsec String u Bool
 boolean = spaces *> (true <|> false) <* spaces
   where
-    true  = string "true" $> True
-    false = string "false" $> False
+    true  = string "true" *> notFollowedBy identifierChar $> True
+    false = string "false" *> notFollowedBy identifierChar $> False
 
 number :: Parsec String u Integer
 number = spaces *> (positive <|> negative) <* spaces
@@ -72,7 +78,8 @@ atom = foldl1 (<|>) atoms
   where
     atoms =
       try
-        <$> [ BoolLiteral <$> boolean
+        <$> [ underscore
+            , BoolLiteral <$> boolean
             , NumberLiteral <$> number
             , Identifier <$> identifier
             , block
@@ -110,6 +117,19 @@ ifExpr = do
   else' <- string "else" *> term
   return $ If cond then' else'
 
+matchExpr :: Parsec String u Expr
+matchExpr = do
+  value <- string "match" *> term <* spaces
+  cases <- spaces *> braces body <* spaces
+  return $ Match value cases
+  where
+    braces p = char '{' *> p <* char '}'
+    body = many caseExpr
+    caseExpr =
+      (,)
+        <$> (anySpaces *> string "case" *> atom)
+        <*> (string "=>" *> spaces *> expr)
+
 letBinding :: Parsec String u Expr
 letBinding = Let <$> (let' *> identifier) <*> args' <* char '=' <*> expr
   where
@@ -117,7 +137,10 @@ letBinding = Let <$> (let' *> identifier) <*> args' <* char '=' <*> expr
     args' = many identifier
 
 expr :: Parsec String u Expr
-expr = anySpaces *> (try letBinding <|> try ifExpr <|> try term) <* anySpaces
+expr =
+  anySpaces
+    *> (try letBinding <|> try matchExpr <|> try ifExpr <|> try term)
+    <* anySpaces
 
 parse :: String -> Either String AST
 parse = mapLeft show . runParser (Expr <$> expr <* eof) () ""

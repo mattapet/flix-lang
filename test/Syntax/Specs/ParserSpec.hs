@@ -13,70 +13,60 @@ spec = do
   describe "Expressions" $ do
     describe "Basic expressions" $ do
       let
-        testSuites =
-          [ ("true" , Right $ Expr $ BoolLiteral True)
-          , ("false", Right $ Expr $ BoolLiteral False)
-          , ("1"    , Right $ Expr $ NumberLiteral 1)
-          , ("-1"   , Right $ Expr $ NumberLiteral (-1))
-          , ("(1)"  , Right $ Expr $ NumberLiteral 1)
-          , ("x"    , Right $ Expr $ Identifier "x")
-          , ("x'"   , Right $ Expr $ Identifier "x'")
-          , ("a_b"  , Right $ Expr $ Identifier "a_b")
-          , ("f a"  , Right $ Expr $ Call (Identifier "f") [Identifier "a"])
-          , ( "f a b"
-            , Right $ Expr $ Call (Identifier "f")
-                                  [Identifier "a", Identifier "b"]
-            )
+        testSuite =
+          [ ("_"    , Underscore)
+          , ("true" , BoolLiteral True)
+          , ("false", BoolLiteral False)
+          , ("trueF", Identifier "trueF")
+          , ("false", BoolLiteral False)
+          , ("1"    , NumberLiteral 1)
+          , ("-1"   , NumberLiteral (-1))
+          , ("(1)"  , NumberLiteral 1)
+          , ("x"    , Identifier "x")
+          , ("x'"   , Identifier "x'")
+          , ("a_b"  , Identifier "a_b")
+          , ("f a"  , Call (Identifier "f") [Identifier "a"])
+          , ("f a b", Call (Identifier "f") [Identifier "a", Identifier "b"])
           , ( "x+y+z"
-            , Right $ Expr $ BinOp
-              "+"
-              (BinOp "+" (Identifier "x") (Identifier "y"))
-              (Identifier "z")
+            , BinOp "+"
+                    (BinOp "+" (Identifier "x") (Identifier "y"))
+                    (Identifier "z")
             )
-          , ("let x = 2"  , Right $ Expr $ Let "x" [] (NumberLiteral 2))
-          , ("let f a = a", Right $ Expr $ Let "f" ["a"] (Identifier "a"))
-          , ("{ 2 }"      , Right $ Expr $ Block [NumberLiteral 2])
-          , ( "let f a = { a }"
-            , Right $ Expr $ Let "f" ["a"] (Block [Identifier "a"])
-            )
+          , ("let x = 2"      , Let "x" [] (NumberLiteral 2))
+          , ("let f a = a"    , Let "f" ["a"] (Identifier "a"))
+          , ("{ 2 }"          , Block [NumberLiteral 2])
+          , ("let f a = { a }", Let "f" ["a"] (Block [Identifier "a"]))
           , ( "{\n\
             \  let x = 2\n\
             \  x\n\
             \}"
-            , Right $ Expr $ Block
-              [Let "x" [] (NumberLiteral 2), Identifier "x"]
+            , Block [Let "x" [] (NumberLiteral 2), Identifier "x"]
             )
           , ( "if true then 1 else 2"
-            , Right $ Expr $ If (BoolLiteral True)
-                                (NumberLiteral 1)
-                                (NumberLiteral 2)
+            , If (BoolLiteral True) (NumberLiteral 1) (NumberLiteral 2)
             )
           , ( "if true then x else y"
-            , Right $ Expr $ If (BoolLiteral True)
-                                (Identifier "x")
-                                (Identifier "y")
+            , If (BoolLiteral True) (Identifier "x") (Identifier "y")
             )
           , ( "if true\n\
               \  then 1\n\
               \  else 0"
-            , Right $ Expr $ If (BoolLiteral True)
-                                (NumberLiteral 1)
-                                (NumberLiteral 0)
+            , If (BoolLiteral True) (NumberLiteral 1) (NumberLiteral 0)
             )
           , ( "{\n\
               \  let x = 2\n\
               \  let y = 4\n\
               \  x + y\n\
               \}"
-            , Right $ Expr $ Block
+            , Block
               [ Let "x" [] (NumberLiteral 2)
               , Let "y" [] (NumberLiteral 4)
               , BinOp "+" (Identifier "x") (Identifier "y")
               ]
             )
-          , ("let id a = a", Right $ Expr $ Let "id" ["a"] (Identifier "a"))
+          , ("let id a = a", Let "id" ["a"] (Identifier "a"))
           , ( "let factorial n = if n < 1 then 1 else n * factorial (n - 1)"
-            , Right $ Expr $ Let
+            , Let
               "factorial"
               ["n"]
               (If
@@ -97,7 +87,7 @@ spec = do
             \    else factorial' (n - 1) (n * acc)\n\
             \  factorial' n 1\n\
             \}"
-            , Right $ Expr $ Let
+            , Let
               "factorial"
               ["n"]
               (Block
@@ -116,14 +106,47 @@ spec = do
               )
             )
           ]
-      forM_ testSuites $ \(in', out) ->
+      forM_ testSuite $ \(in', out) ->
         it (printf "parses %s into %s" (show in') (show out)) $ do
-          parse in' `shouldBe` out
+          parse in' `shouldBe` Right (Expr out)
+
+      describe "Match expressions" $ do
+        let
+          testSuite =
+            [ ( "match x {\n\
+                \  case true  => 1\n\
+                \  case false => 0\n\
+                \}"
+              , Match
+                (Identifier "x")
+                [ (BoolLiteral True , NumberLiteral 1)
+                , (BoolLiteral False, NumberLiteral 0)
+                ]
+              )
+            , ( "match x {\n\
+                \  case true  => {\n\
+                \    let x = 123\n\
+                \    x\n\
+                \  }\n\
+                \  case _ => 0\n\
+                \}"
+              , Match
+                (Identifier "x")
+                [ ( BoolLiteral True
+                  , Block [Let "x" [] (NumberLiteral 123), Identifier "x"]
+                  )
+                , (Underscore, NumberLiteral 0)
+                ]
+              )
+            ]
+        forM_ testSuite $ \(in', out) ->
+          it (printf "parses match expression %s" (show in')) $ do
+            parse in' `shouldBe` Right (Expr out)
 
       describe "operator binary operator parsing" $ do
-        let testSuites =
+        let testSuite =
               ["+", "-", "*", "/", "==", "<", ">", "<=", ">=", "&&", "||"]
-        forM_ testSuites $ \op ->
+        forM_ testSuite $ \op ->
           it (printf "parses binary operator '%s'" (show op)) $ do
             let result = BinOp op (Identifier "x") (Identifier "y")
             parse (printf "x %s y" op) `shouldBe` Right (Expr result)

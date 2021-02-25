@@ -25,7 +25,13 @@ source-repository head
 
 library
   exposed-modules:
+      Control.Monad.State
+      Control.Monad.StateT
+      Eval.Core
       Lib
+      Syntax.Core
+      Syntax.Parser
+      Syntax.Renamer
   other-modules:
       Paths_flix_lang
   hs-source-dirs:
@@ -55,7 +61,8 @@ test-suite flix-lang-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      SampleSpec
+      Syntax.Specs.ParserSpec
+      Syntax.Specs.RenamerSpec
       Paths_flix_lang
   hs-source-dirs:
       test
