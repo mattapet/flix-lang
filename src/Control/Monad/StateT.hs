@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TupleSections #-}
 
 module Control.Monad.StateT where
 
@@ -12,6 +13,9 @@ get = StateT $ \s -> return (s, s)
 
 put :: (Monad m) => s -> StateT s m ()
 put s = StateT $ \_ -> return ((), s)
+
+liftStateM :: (Monad m) => m a -> StateT s m a
+liftStateM ma = StateT $ \s -> (, s) <$> ma
 
 instance (Functor m) => Functor (StateT s m) where
   fmap f ma = StateT $ fmap (first f) . runStateT ma
