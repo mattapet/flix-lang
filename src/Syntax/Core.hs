@@ -1,7 +1,7 @@
 module Syntax.Core where
 
 type Name = String
-type OperatorName = String
+type OpName = String
 
 type CaseExpr = (Expr, Expr)
 
@@ -11,7 +11,7 @@ data Expr =
   | NumberLiteral Integer
   | Identifier String
   | Call Expr [Expr]
-  | BinOp OperatorName Expr Expr
+  | BinOp OpName Expr Expr
   | Let Name [Name] Expr
   | If Expr Expr Expr
   | Block [Expr]

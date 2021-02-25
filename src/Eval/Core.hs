@@ -1,22 +1,25 @@
 module Eval.Core where
 
-import           Data.Maybe                     ( fromMaybe )
+data Literal =
+    Bool Bool
+  | Int Integer
+  deriving (Show, Eq)
 
 data CoreExpr =
-    BoolE Bool
-  | IntE Integer
-  | VarE String
-  | AppE CoreExpr CoreExpr
-  | LamE String CoreExpr
-  deriving (Eq, Show)
+    Lit Literal
+  | Var Name
+  | Let Bind CoreExpr
+  | App CoreExpr Arg
+  | Lam Name CoreExpr
+  | Case CoreExpr [Pattern]
+  deriving (Show, Eq)
 
-type Env = [(String, CoreExpr)]
+type Name = String
+type Arg = CoreExpr
+type Bind = (Name, CoreExpr)
 
-eval :: Env -> CoreExpr -> CoreExpr
-eval _   val@BoolE{}         = val
-eval _   val@IntE{}          = val
-eval env (VarE x)            = fromMaybe (VarE x) (lookup x env)
-eval _   val@LamE{}          = val
-
-eval env (AppE (LamE x b) e) = eval ((x, e) : env) b
-eval _   val@AppE{}          = val
+data Pattern =
+    LitP Literal CoreExpr
+  | Default CoreExpr
+  | ErrorP
+  deriving (Show, Eq)

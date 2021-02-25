@@ -1,0 +1,147 @@
+module Syntax.Specs.DesugarSpec
+  ( spec
+  ) where
+
+import           Control.Monad                  ( forM_ )
+import qualified Eval.Core                     as C
+import qualified Syntax.Core                   as S
+import           Syntax.Desugar                 ( desugar )
+import           Test.Hspec
+import           Text.Printf                    ( printf )
+
+spec :: Spec
+spec = do
+  describe "Atoms" $ do
+    let
+      testSuite =
+        [ (S.BoolLiteral True               , C.Lit (C.Bool True))
+        , (S.NumberLiteral 1                , C.Lit (C.Int 1))
+        , (S.Identifier "x"                 , C.Var "x")
+        , (S.Lambda ["x"] (S.Identifier "x"), C.Lam "x" (C.Var "x"))
+        , ( S.Lambda ["x", "y"] (S.Identifier "x")
+          , C.Lam "x" (C.Lam "y" (C.Var "x"))
+          )
+        ]
+    forM_ testSuite $ \(in', out) ->
+      it (printf "translates %s to %s" (show in') (show out)) $ do
+        desugar (S.Expr in') `shouldBe` Right out
+
+  describe "Calls" $ do
+    let testSuite =
+          [ (S.Call (S.Identifier "f") [], C.Var "f")
+          , ( S.Call (S.Identifier "f") [S.Identifier "a"]
+            , C.App (C.Var "f") (C.Var "a")
+            )
+          , ( S.Call (S.Identifier "f") [S.Identifier "a", S.NumberLiteral 4]
+            , C.App (C.App (C.Var "f") (C.Var "a")) (C.Lit $ C.Int 4)
+            )
+          , ( S.Call (S.Lambda ["x"] (S.Identifier "x")) [S.NumberLiteral 1]
+            , C.App (C.Lam "x" (C.Var "x")) (C.Lit (C.Int 1))
+            )
+          , ( S.BinOp "+" (S.Identifier "x") (S.Identifier "y")
+            , C.App (C.App (C.Var "+") (C.Var "x")) (C.Var "y")
+            )
+          ]
+    forM_ testSuite $ \(in', out) ->
+      it (printf "translates %s to %s" (show in') (show out)) $ do
+        desugar (S.Expr in') `shouldBe` Right out
+
+  describe "Basic Bindings" $ do
+    let testSuite =
+          [ ( S.Let "x" [] (S.NumberLiteral 1)
+            , C.Lam "_$1" (C.App (C.Lam "x" (C.Var "_$1")) (C.Lit (C.Int 1)))
+            )
+          , ( S.Let "x" ["a"] (S.Identifier "a")
+            , C.Lam "_$1"
+                    (C.App (C.Lam "x" (C.Var "_$1")) (C.Lam "a" (C.Var "a")))
+            )
+          , ( S.Let "x" ["a", "b"] (S.Identifier "a")
+            , C.Lam
+              "_$1"
+              (C.App (C.Lam "x" (C.Var "_$1"))
+                     (C.Lam "a" (C.Lam "b" (C.Var "a")))
+              )
+            )
+          ]
+    forM_ testSuite $ \(in', out) ->
+      it (printf "translates %s to %s" (show in') (show out)) $ do
+        desugar (S.Expr in') `shouldBe` Right out
+
+  describe "Bindings in Blocks" $ do
+    let testSuite =
+          [ ( S.Block [S.Let "x" [] (S.NumberLiteral 1), S.Identifier "x"]
+            , C.App
+              (C.Lam "_$1" (C.App (C.Lam "x" (C.Var "_$1")) (C.Lit $ C.Int 1)))
+              (C.Var "x")
+            )
+          , ( S.Block
+              [ S.Let "x" [] (S.NumberLiteral 1)
+              , S.Let "y" [] (S.NumberLiteral 2)
+              , S.BinOp "+" (S.Identifier "x") (S.Identifier "y")
+              ]
+            , C.App
+              (C.App
+                (C.Lam "_$1" (C.App (C.Lam "x" (C.Var "_$1")) (C.Lit (C.Int 1)))
+                )
+                (C.Lam "_$2" (C.App (C.Lam "y" (C.Var "_$2")) (C.Lit (C.Int 2)))
+                )
+              )
+              (C.App (C.App (C.Var "+") (C.Var "x")) (C.Var "y"))
+            )
+          , ( S.Block [S.Identifier "x", S.Identifier "y"]
+            , C.App
+              (C.Lam "_$1" (C.App (C.Lam "_$2" (C.Var "_$1")) (C.Var "x")))
+              (C.Var "y")
+            )
+          ]
+    forM_ testSuite $ \(in', out) ->
+      it (printf "translates %s to %s" (show in') (show out)) $ do
+        desugar (S.Expr in') `shouldBe` Right out
+
+  describe "Invalid blocks" $ do
+    let testSuite =
+          [ (S.Block [], "Unexpected empty block")
+          , ( S.Block [S.Let "x" [] (S.NumberLiteral 1)]
+            , "Illegal binding at the end of the block"
+            )
+          ]
+    forM_ testSuite $ \(in', out) ->
+      it (printf "translates %s to %s" (show in') (show out)) $ do
+        desugar (S.Expr in') `shouldBe` Left out
+
+
+  describe "Case expressions" $ do
+    let testSuite =
+          [ ( S.If (S.Identifier "x") (S.Identifier "y") (S.Identifier "z")
+            , C.Case
+              (C.Var "x")
+              [ C.LitP (C.Bool True) (C.Var "y")
+              , C.LitP (C.Bool False) (C.Var "z")
+              , C.ErrorP
+              ]
+            )
+          , ( S.Match
+              (S.Identifier "x")
+              [ (S.NumberLiteral 1 , S.Identifier "y")
+              , (S.BoolLiteral True, S.Identifier "z")
+              ]
+            , C.Case
+              (C.Var "x")
+              [ C.LitP (C.Int 1) (C.Var "y")
+              , C.LitP (C.Bool True) (C.Var "z")
+              , C.ErrorP
+              ]
+            )
+          , ( S.Match
+              (S.Identifier "x")
+              [ (S.NumberLiteral 1, S.Identifier "y")
+              , (S.Underscore     , S.Identifier "z")
+              ]
+            , C.Case
+              (C.Var "x")
+              [C.LitP (C.Int 1) (C.Var "y"), C.Default (C.Var "z"), C.ErrorP]
+            )
+          ]
+    forM_ testSuite $ \(in', out) ->
+      it (printf "translates %s to %s" (show in') (show out)) $ do
+        desugar (S.Expr in') `shouldBe` Right out
