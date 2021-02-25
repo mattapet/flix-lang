@@ -16,6 +16,7 @@ data Expr =
   | If Expr Expr Expr
   | Block [Expr]
   | Match Expr [CaseExpr]
+  | Lambda [Name] Expr
   deriving (Show, Eq)
 
 data AST = Expr Expr

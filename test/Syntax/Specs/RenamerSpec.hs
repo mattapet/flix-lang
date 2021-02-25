@@ -13,7 +13,8 @@ spec = do
   describe "Top level expressions" $ do
     let
       testSuite =
-        [ (BoolLiteral True , BoolLiteral True)
+        [ (Underscore       , Underscore)
+        , (BoolLiteral True , BoolLiteral True)
         , (BoolLiteral False, BoolLiteral False)
         , (NumberLiteral 1  , NumberLiteral 1)
         , (Identifier "x"   , Identifier "x")
@@ -76,6 +77,33 @@ spec = do
     forM_ testSuite $ \(in', out) ->
       it (printf "should rename %s to %s" (show in') (show out)) $ do
         rename (Expr in') `shouldBe` Right (Expr out)
+
+  describe "Lambda renaming" $ do
+    it "renames arguments" $ do
+      let in' = Lambda ["x"] (Identifier "x")
+      let out = Lambda ["x_$1"] (Identifier "x_$1")
+      rename (Expr in') `shouldBe` Right (Expr out)
+
+  describe "Match expressions" $ do
+    it "renames branch variables" $ do
+      let
+        in' =
+          Let "f" ["x"] (Match (Identifier "x") [(Underscore, Identifier "x")])
+      let out = Let
+            "f_$1"
+            ["x_$1"]
+            (Match (Identifier "x_$1") [(Underscore, Identifier "x_$1")])
+      rename (Expr in') `shouldBe` Right (Expr out)
+    it "introduce new names on variable capture" $ do
+      let
+        in' = Let "f"
+                  ["x"]
+                  (Match (Identifier "x") [(Identifier "y", Identifier "y")])
+      let out = Let
+            "f_$1"
+            ["x_$1"]
+            (Match (Identifier "x_$1") [(Identifier "y_$1", Identifier "y_$1")])
+      rename (Expr in') `shouldBe` Right (Expr out)
 
   describe "Conflicting definitions detections" $ do
     let testSuite =

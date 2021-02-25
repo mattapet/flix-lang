@@ -1,3 +1,5 @@
+{-# LANGUAGE TupleSections #-}
+
 module Syntax.Renamer
   ( rename
   ) where
@@ -7,10 +9,12 @@ import           Control.Monad.StateT
 import           Data.List                      ( intercalate
                                                 , intersect
                                                 )
-import           Data.Map                hiding ( drop
-                                                , lookup
+import           Data.Map                       ( (!?)
+                                                , Map
+                                                , empty
+                                                , insert
                                                 )
-import           Data.Maybe
+import           Data.Maybe                     ( fromMaybe )
 import           Syntax.Core
 
 type Env = Map String Int
@@ -24,6 +28,7 @@ rename' :: Names -> AST -> Result AST
 rename' ns (Expr e) = Expr <$> renameE ns e
 
 renameE :: Names -> Expr -> Result Expr
+renameE _  Underscore          = return Underscore
 renameE _  val@BoolLiteral{}   = return val
 renameE _  val@NumberLiteral{} = return val
 
@@ -56,7 +61,23 @@ renameE ns (If cond then' else') = do
   else'' <- renameE ns else'
   return $ If cond' then'' else''
 
-renameE ns (Block exprs) = Block <$> renameBlock ns exprs
+renameE ns (Block exprs      ) = Block <$> renameBlock ns exprs
+
+renameE ns (Match value cases) = do
+  value' <- renameE ns value
+  cases' <- traverse (renameCase ns) cases
+  return $ Match value' cases'
+  where
+    renameCase ns' (Identifier var, branch) = do
+      [(var', varRenamed)] <- renameVariables [var]
+      (Identifier varRenamed, ) <$> renameE ((var', varRenamed) : ns') branch
+    renameCase ns' (ptr, branch) = (ptr, ) <$> renameE ns' branch
+
+renameE ns (Lambda args body) = do
+  ns'   <- renameVariables args
+  body' <- renameE (ns' ++ ns) body
+  let args' = snd <$> ns'
+  return $ Lambda args' body'
 
 -- Helper functions
 

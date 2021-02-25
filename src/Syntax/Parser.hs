@@ -64,6 +64,13 @@ number = spaces *> (positive <|> negative) <* spaces
     positive = read <$> many1 digit
     negative = negate <$> (char '-' *> positive)
 
+lambda :: Parsec String u Expr
+lambda = spaces *> braces body <* spaces
+  where
+    braces p = char '{' *> p <* char '}'
+    body = Lambda <$> args <*> expr
+    args = anySpace *> many1 identifier <* spaces <* string "=>" <* spaces
+
 block :: Parsec String u Expr
 block = Block <$> (spaces *> braces body <* spaces)
   where
@@ -82,6 +89,7 @@ atom = foldl1 (<|>) atoms
             , BoolLiteral <$> boolean
             , NumberLiteral <$> number
             , Identifier <$> identifier
+            , lambda
             , block
             , parens
             ]
@@ -90,7 +98,7 @@ atom = foldl1 (<|>) atoms
 
 call :: Parsec String u Expr
 call = do
-  f <- Identifier <$> identifier
+  f <- atom
   many atom >>= \case
     []   -> return f
     args -> return $ Call f args

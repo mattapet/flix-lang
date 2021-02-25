@@ -124,7 +124,7 @@ spec = do
                 ]
               )
             , ( "match x {\n\
-                \  case true  => {\n\
+                \  case true => {\n\
                 \    let x = 123\n\
                 \    x\n\
                 \  }\n\
@@ -142,6 +142,34 @@ spec = do
         forM_ testSuite $ \(in', out) ->
           it (printf "parses match expression %s" (show in')) $ do
             parse in' `shouldBe` Right (Expr out)
+
+      describe "Lambda expressions" $ do
+        let
+          testSuite =
+            [ ("{ x => x }", Lambda ["x"] (Identifier "x"))
+            , ( "{ x y => x + y }"
+              , Lambda ["x", "y"] (BinOp "+" (Identifier "x") (Identifier "y"))
+              )
+            , ( "{ x y => {\n\
+                  \  let sum = x + y\n\
+                  \  sum\n\
+                  \}}"
+              , Lambda
+                ["x", "y"]
+                (Block
+                  [ Let "sum" [] (BinOp "+" (Identifier "x") (Identifier "y"))
+                  , Identifier "sum"
+                  ]
+                )
+              )
+            , ( "{ x => x } 2"
+              , Call (Lambda ["x"] (Identifier "x")) [NumberLiteral 2]
+              )
+            ]
+        forM_ testSuite $ \(in', out) ->
+          it (printf "parses lambda %s" (show in')) $ do
+            parse in' `shouldBe` Right (Expr out)
+
 
       describe "operator binary operator parsing" $ do
         let testSuite =
