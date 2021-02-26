@@ -138,29 +138,3 @@ spec = do
           Right _ ->
             fail $ printf "Expression %s expected to fail but didn't" (show in')
           Left out -> out `shouldBe` out'
-
-
-  describe "factorial" $ do
-    it "computes factorial" $ do
-      let
-        input = Bind
-          ( "factorial_$1"
-          , Lam
-            "n_$1"
-            (Case
-              (App (App (Var "<") (Var "n_$1")) (Lit (Int 2)))
-              [ LitP (Bool True) (Lit (Int 1))
-              , LitP
-                (Bool False)
-                (App
-                  (App (Var "*") (Var "n_$1"))
-                  (App (Var "factorial_$1")
-                       (App (App (Var "-") (Var "n_$1")) (Lit (Int 1)))
-                  )
-                )
-              ]
-            )
-          )
-          (App (Var "factorial_$1") (Lit (Int 5)))
-      let output = LitV $ Int 120
-      show . fst <$> eval builtins input `shouldBe` Right (show output)

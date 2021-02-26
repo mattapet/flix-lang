@@ -55,20 +55,23 @@ apply (LambdaV env arg body) value = pushFrame $ switchContext env $ do
   eval' body
 apply expr _ = fail $ "Expression '" ++ show expr ++ "' is not callable"
 
-patternMatch :: [Pattern] -> Value -> Result (Maybe Value)
+patternMatch :: [PatternCase] -> Value -> Result (Maybe Value)
 patternMatch [] _ = return Nothing
 patternMatch (x : xs) value =
   liftA2 (<|>) (patternMatch' x value) (patternMatch xs value)
 
-patternMatch' :: Pattern -> Value -> Result (Maybe Value)
-patternMatch' (DefaultP result) _ = Just <$> eval' result
+patternMatch' :: PatternCase -> Value -> Result (Maybe Value)
+patternMatch' (DefaultP, result) _ = Just <$> eval' result
 -- Matching literals
-patternMatch' (LitP (Int x) result) (LitV (Int y))
+patternMatch' (LitP (Int x), result) (LitV (Int y))
   | x == y    = Just <$> eval' result
   | otherwise = return Nothing
-patternMatch' (LitP (Bool x) result) (LitV (Bool y))
+patternMatch' (LitP (Bool x), result) (LitV (Bool y))
   | x == y    = Just <$> eval' result
   | otherwise = return Nothing
+-- Matching variables
+patternMatch' (VarP name, result) value =
+  bindValue name value >> Just <$> eval' result
 patternMatch' _ _ = return Nothing
 
 lookupVariable :: Name -> Result Value

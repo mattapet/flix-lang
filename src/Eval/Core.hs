@@ -15,30 +15,21 @@ data CoreExpr =
   | App CoreExpr Arg
   | Bind Bind Body
   | Lam Name Body
-  | Case CoreExpr [Pattern]
+  | Case CoreExpr [PatternCase]
   deriving (Show, Eq)
 
 type Name = String
 type Arg = CoreExpr
 type Body = CoreExpr
 type Bind = (Name, Arg)
+type PatternCase = (Pattern, CoreExpr)
 
 data Pattern =
-    LitP Literal CoreExpr
-  | DefaultP CoreExpr
+    LitP Literal
+  | VarP Name
+  | TupleP [Pattern]
+  | DefaultP
   deriving (Show, Eq)
-
-data CaseResult =
-    Match Value
-  | Fail
-  deriving Show
-
-instance Semigroup CaseResult where
-  val@Match{} <> _ = val
-  Fail        <> x = x
-
-instance Monoid CaseResult where
-  mempty = Fail
 
 -- Values
 

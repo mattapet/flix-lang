@@ -1,5 +1,7 @@
+{-# LANGUAGE TupleSections #-}
 module Syntax.Desugar where
 
+import           Control.Applicative            ( liftA2 )
 import           Control.Monad.StateT
 import           Data.Foldable                  ( foldlM )
 import           Data.Functor                   ( ($>) )
@@ -45,17 +47,23 @@ desugarE (S.If cond then' else') = do
   cond'  <- desugarE cond
   then'' <- desugarE then'
   else'' <- desugarE else'
-  return
-    $ C.Case cond' [C.LitP (C.Bool True) then'', C.LitP (C.Bool False) else'']
+  return $ C.Case
+    cond'
+    [(C.LitP (C.Bool True), then''), (C.LitP (C.Bool False), else'')]
 
 desugarE (S.Match value cases) = do
   value' <- desugarE value
   cases' <- traverse desugarCase cases
   return $ C.Case value' cases'
   where
-    desugarCase (S.BoolLiteral   x, expr) = C.LitP (C.Bool x) <$> desugarE expr
-    desugarCase (S.NumberLiteral x, expr) = C.LitP (C.Int x) <$> desugarE expr
-    desugarCase (S.Underscore     , expr) = C.DefaultP <$> desugarE expr
+    desugarCase (pattern, result) =
+      liftA2 (,) (desugarPattern pattern) (desugarE result)
+    desugarPattern S.Underscore         = return C.DefaultP
+    desugarPattern (S.BoolLiteral   x ) = return $ C.LitP $ C.Bool x
+    desugarPattern (S.NumberLiteral x ) = return $ C.LitP $ C.Int x
+    desugarPattern (S.Identifier    x ) = return $ C.VarP x
+    desugarPattern (S.Tuple es) = C.TupleP <$> traverse desugarPattern es
+    desugarPattern _                    = error "Unsupported pattern match"
 
 
 desugarE _ = undefined

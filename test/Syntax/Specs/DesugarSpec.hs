@@ -107,32 +107,43 @@ spec = do
 
 
   describe "Case expressions" $ do
-    let testSuite =
-          [ ( S.If (S.Identifier "x") (S.Identifier "y") (S.Identifier "z")
-            , C.Case
-              (C.Var "x")
-              [ C.LitP (C.Bool True) (C.Var "y")
-              , C.LitP (C.Bool False) (C.Var "z")
-              ]
-            )
-          , ( S.Match
-              (S.Identifier "x")
-              [ (S.NumberLiteral 1 , S.Identifier "y")
-              , (S.BoolLiteral True, S.Identifier "z")
-              ]
-            , C.Case
-              (C.Var "x")
-              [C.LitP (C.Int 1) (C.Var "y"), C.LitP (C.Bool True) (C.Var "z")]
-            )
-          , ( S.Match
-              (S.Identifier "x")
-              [ (S.NumberLiteral 1, S.Identifier "y")
-              , (S.Underscore     , S.Identifier "z")
-              ]
-            , C.Case (C.Var "x")
-                     [C.LitP (C.Int 1) (C.Var "y"), C.DefaultP (C.Var "z")]
-            )
-          ]
+    let
+      testSuite =
+        [ ( S.If (S.Identifier "x") (S.Identifier "y") (S.Identifier "z")
+          , C.Case
+            (C.Var "x")
+            [ (C.LitP (C.Bool True) , C.Var "y")
+            , (C.LitP (C.Bool False), C.Var "z")
+            ]
+          )
+        , ( S.Match
+            (S.Identifier "x")
+            [ (S.NumberLiteral 1 , S.Identifier "y")
+            , (S.BoolLiteral True, S.Identifier "z")
+            ]
+          , C.Case
+            (C.Var "x")
+            [(C.LitP (C.Int 1), C.Var "y"), (C.LitP (C.Bool True), C.Var "z")]
+          )
+        , ( S.Match
+            (S.Identifier "x")
+            [ (S.NumberLiteral 1, S.Identifier "y")
+            , (S.Underscore     , S.Identifier "z")
+            ]
+          , C.Case (C.Var "x")
+                   [(C.LitP (C.Int 1), C.Var "y"), (C.DefaultP, C.Var "z")]
+          )
+        , ( S.Match (S.Identifier "x") [(S.Identifier "y", S.Identifier "y")]
+          , C.Case (C.Var "x") [(C.VarP "y", C.Var "y")]
+          )
+        , ( S.Match
+            (S.Identifier "x")
+            [(S.Tuple [S.NumberLiteral 1, S.NumberLiteral 2], S.Identifier "y")]
+          , C.Case
+            (C.Var "x")
+            [(C.TupleP [C.LitP $ C.Int 1, C.LitP $ C.Int 2], (C.Var "y"))]
+          )
+        ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
         desugar (S.Expr in') `shouldBe` Right out

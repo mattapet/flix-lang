@@ -114,8 +114,13 @@ renameExpr (Match value caseExprs) =
   liftA2 Match (renameExpr value) (traverse renameCaseExpr caseExprs)
 
 renameCaseExpr :: CaseExpr -> Result CaseExpr
-renameCaseExpr (pattern, value) =
+renameCaseExpr (pattern, value) = pushFrame $ do
+  _ <- introduceVariables $ collectVariables pattern
   liftA2 (,) (renameExpr pattern) (renameExpr value)
+  where
+    collectVariables (Identifier x) = [x]
+    collectVariables (Tuple      t) = foldMap collectVariables t
+    collectVariables _              = []
 
 -- Declarations
 
