@@ -8,6 +8,7 @@ module Eval.Interpreter
 
 import           Control.Applicative            ( liftA2 )
 import           Control.Monad.StateT
+import           Data.Functor                   ( ($>) )
 import qualified Data.Map                      as Map
 import           Eval.Core
 
@@ -25,14 +26,30 @@ setEnv = Result . put
 
 eval :: Environment -> CoreExpr -> Either String (Value, Environment)
 eval env = flip runStateT env . runResult . eval'
-  where
-    eval' :: CoreExpr -> Result Value
-    eval' (Lit x         ) = return $ LitV x
-    eval' (Var x         ) = lookupVariable x
-    eval' (App callee arg) = bind2 apply (eval' callee) (eval' arg)
+
+eval' :: CoreExpr -> Result Value
+eval' (Lit x       ) = return $ LitV x
+eval' (Var x       ) = lookupVariable x
+eval' (Lam arg body) = do
+  env <- getEnv
+  return $ LambdaV env arg body
+eval' (App  callee        arg    ) = bind2 apply (eval' callee) (eval' arg)
+eval' (Bind (name, value) context) = do
+  env    <- getEnv
+  value' <- eval' value
+  setEnv $ Map.insert name value' env
+  result <- eval' context
+  setEnv env $> result
 
 apply :: Value -> Value -> Result Value
-apply (BuiltinV _ fn) value = Result $ liftStateM $ fn value
+apply (BuiltinV _ fn       ) value = Result $ liftStateM $ fn value
+apply (LambdaV env arg body) value = do
+  originalEnv <- getEnv
+  _           <- setEnv $ Map.insert arg value env
+  result      <- eval' body
+  setEnv originalEnv $> result
+apply expr _ = fail $ "Expression '" ++ show expr ++ "' is not callable"
+
 
 
 lookupVariable :: Name -> Result Value

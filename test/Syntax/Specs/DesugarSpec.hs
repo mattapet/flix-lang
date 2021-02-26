@@ -47,22 +47,20 @@ spec = do
         desugar (S.Expr in') `shouldBe` Right out
 
   describe "Basic Bindings" $ do
-    let testSuite =
-          [ ( S.Let "x" [] (S.NumberLiteral 1)
-            , C.Lam "_$1" (C.App (C.Lam "x" (C.Var "_$1")) (C.Lit (C.Int 1)))
-            )
-          , ( S.Let "x" ["a"] (S.Identifier "a")
-            , C.Lam "_$1"
-                    (C.App (C.Lam "x" (C.Var "_$1")) (C.Lam "a" (C.Var "a")))
-            )
-          , ( S.Let "x" ["a", "b"] (S.Identifier "a")
-            , C.Lam
-              "_$1"
-              (C.App (C.Lam "x" (C.Var "_$1"))
-                     (C.Lam "a" (C.Lam "b" (C.Var "a")))
-              )
-            )
-          ]
+    let
+      testSuite =
+        [ ( S.Let "x" [] (S.NumberLiteral 1)
+          , C.Lam "_$1" (C.Bind ("x", C.Lit (C.Int 1)) (C.Var "_$1"))
+          )
+        , ( S.Let "x" ["a"] (S.Identifier "a")
+          , C.Lam "_$1" (C.Bind ("x", C.Lam "a" (C.Var "a")) (C.Var "_$1"))
+          )
+        , ( S.Let "x" ["a", "b"] (S.Identifier "a")
+          , C.Lam
+            "_$1"
+            (C.Bind ("x", C.Lam "a" (C.Lam "b" (C.Var "a"))) (C.Var "_$1"))
+          )
+        ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
         desugar (S.Expr in') `shouldBe` Right out
@@ -70,28 +68,21 @@ spec = do
   describe "Bindings in Blocks" $ do
     let testSuite =
           [ ( S.Block [S.Let "x" [] (S.NumberLiteral 1), S.Identifier "x"]
-            , C.App
-              (C.Lam "_$1" (C.App (C.Lam "x" (C.Var "_$1")) (C.Lit $ C.Int 1)))
-              (C.Var "x")
+            , C.Bind ("x", C.Lit (C.Int 1)) (C.Var "x")
             )
           , ( S.Block
               [ S.Let "x" [] (S.NumberLiteral 1)
               , S.Let "y" [] (S.NumberLiteral 2)
               , S.BinOp "+" (S.Identifier "x") (S.Identifier "y")
               ]
-            , C.App
-              (C.App
-                (C.Lam "_$1" (C.App (C.Lam "x" (C.Var "_$1")) (C.Lit (C.Int 1)))
-                )
-                (C.Lam "_$2" (C.App (C.Lam "y" (C.Var "_$2")) (C.Lit (C.Int 2)))
-                )
+            , C.Bind
+              ("x", C.Lit (C.Int 1))
+              (C.Bind ("y", C.Lit (C.Int 2))
+                      (C.App (C.App (C.Var "+") (C.Var "x")) (C.Var "y"))
               )
-              (C.App (C.App (C.Var "+") (C.Var "x")) (C.Var "y"))
             )
           , ( S.Block [S.Identifier "x", S.Identifier "y"]
-            , C.App
-              (C.Lam "_$1" (C.App (C.Lam "_$2" (C.Var "_$1")) (C.Var "x")))
-              (C.Var "y")
+            , C.Bind ("_$1", C.Var "x") (C.Var "y")
             )
           ]
     forM_ testSuite $ \(in', out) ->

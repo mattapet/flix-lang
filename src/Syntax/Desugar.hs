@@ -25,18 +25,15 @@ desugarE (S.Call callee (x : xs)) = inner >>= flip (foldlM wrapApp) xs
     inner = C.App <$> desugarE callee <*> desugarE x
     wrapApp callee' arg = C.App callee' <$> desugarE arg
 
+-- Maybe an error here???
 desugarE (S.Let n args body) = do
   body' <- desugarE body
   let fn = foldr C.Lam body' args
   id' <- nextId
-  return $ C.Lam id' (C.App (C.Lam n (C.Var id')) fn)
+  return $ C.Lam id' (C.Bind (n, fn) (C.Var id'))
 
-desugarE (S.Block []       ) = fail "Unexpected empty block"
-desugarE (S.Block [S.Let{}]) = fail "Illegal binding at the end of the block"
-desugarE (S.Block [x      ]) = desugarE x
-desugarE (S.Block xs       ) = do
-  xs' <- desugarBlockExprs xs
-  return $ foldl1 C.App xs'
+desugarE (S.Block xs           ) = desugarBlockExprs xs
+
 
 desugarE (S.If cond then' else') = do
   cond'  <- desugarE cond
@@ -65,20 +62,19 @@ nextId = do
   nextId' <- (+ 1) <$> get
   put nextId' $> "_$" ++ show nextId'
 
-desugarBlockExprs :: [S.Expr] -> StateT Int (Either String) [C.CoreExpr]
-desugarBlockExprs []                = fail "Unexpected empty block"
-desugarBlockExprs [x              ] = (: []) <$> desugarE x
-desugarBlockExprs (x@S.Let{} : xs') = do
-  x'   <- desugarE x
-  xs'' <- desugarBlockExprs xs'
-  return $ x' : xs''
+desugarBlockExprs :: [S.Expr] -> Result C.CoreExpr
+desugarBlockExprs []                          = fail "Unexpected empty block"
+desugarBlockExprs [S.Let{}] = fail "Illegal binding at the end of the block"
+desugarBlockExprs [x                        ] = desugarE x
+desugarBlockExprs (S.Let name args body : xs) = do
+  body' <- desugarE body
+  let fn = foldr C.Lam body' args
+  context <- desugarBlockExprs xs
+  return $ C.Bind (name, fn) context
 -- Wrap side-effect-y expression withing a noop lambda application that ignores
 -- its argument
-desugarBlockExprs (x : xs') = do
+desugarBlockExprs (x : xs) = do
   sideEffect  <- desugarE x
-  xs''        <- desugarBlockExprs xs'
-  actualId    <- nextId
+  context     <- desugarBlockExprs xs
   throwawayId <- nextId
-  return
-    $ C.Lam actualId (C.App (C.Lam throwawayId (C.Var actualId)) sideEffect)
-    : xs''
+  return $ C.Bind (throwawayId, sideEffect) context

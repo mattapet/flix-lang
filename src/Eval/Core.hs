@@ -13,12 +13,15 @@ data CoreExpr =
     Lit Literal
   | Var Name
   | App CoreExpr Arg
-  | Lam Name CoreExpr
+  | Bind Bind Body
+  | Lam Name Body
   | Case CoreExpr [Pattern]
   deriving (Show, Eq)
 
 type Name = String
 type Arg = CoreExpr
+type Body = CoreExpr
+type Bind = (Name, Arg)
 
 data Pattern =
     LitP Literal CoreExpr
@@ -35,7 +38,7 @@ type Builtin = Value -> Either String Value
 
 data Value =
     LitV Literal
-  | LambdaV Environment Arg CoreExpr
+  | LambdaV Environment Name CoreExpr
   | BuiltinV Name Builtin
 
 instance Show Value where
