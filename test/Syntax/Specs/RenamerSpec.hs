@@ -13,11 +13,16 @@ spec = do
   describe "Top level expressions" $ do
     let
       testSuite =
-        [ (Underscore       , Underscore)
-        , (BoolLiteral True , BoolLiteral True)
-        , (BoolLiteral False, BoolLiteral False)
-        , (NumberLiteral 1  , NumberLiteral 1)
-        , (Identifier "x"   , Identifier "x")
+        [ (Underscore         , Underscore)
+        , (BoolLiteral True   , BoolLiteral True)
+        , (BoolLiteral False  , BoolLiteral False)
+        , (NumberLiteral 1    , NumberLiteral 1)
+        , (Identifier "x"     , Identifier "x")
+        , (OperatorCapture "+", OperatorCapture "+")
+        , (Tuple []           , Tuple [])
+        , ( Tuple [NumberLiteral 1, NumberLiteral 2]
+          , Tuple [NumberLiteral 1, NumberLiteral 2]
+          )
         , ( Call (Identifier "f") [Identifier "a"]
           , Call (Identifier "f") [Identifier "a"]
           )
@@ -60,23 +65,33 @@ spec = do
         rename (Expr in') `shouldBe` Right (Expr out)
 
   describe "Block renaming" $ do
-    let testSuite =
-          [ ( Block
-              [ Let "x" []         (NumberLiteral 1)
-              , Let "y" [] (BinOp "+" (NumberLiteral 2) (Identifier "x"))
-              , Let "x" ["y", "z"] (BinOp "+" (Identifier "y") (Identifier "z"))
-              , Call (Identifier "x") [Identifier "y", NumberLiteral 2]
-              ]
-            , Block
-              [ Let "x_$1" [] (NumberLiteral 1)
-              , Let "y_$1" [] (BinOp "+" (NumberLiteral 2) (Identifier "x_$1"))
-              , Let "x_$2"
-                    ["y_$2", "z_$1"]
-                    (BinOp "+" (Identifier "y_$2") (Identifier "z_$1"))
-              , Call (Identifier "x_$2") [Identifier "y_$1", NumberLiteral 2]
-              ]
-            )
-          ]
+    let
+      testSuite =
+        [ ( Block
+            [ Let "x" []         (NumberLiteral 1)
+            , Let "y" []         (BinOp "+" (NumberLiteral 2) (Identifier "x"))
+            , Let "x" ["y", "z"] (BinOp "+" (Identifier "y") (Identifier "z"))
+            , Call (Identifier "x") [Identifier "y", NumberLiteral 2]
+            ]
+          , Block
+            [ Let "x_$1" [] (NumberLiteral 1)
+            , Let "y_$1" [] (BinOp "+" (NumberLiteral 2) (Identifier "x_$1"))
+            , Let "x_$2"
+                  ["y_$2", "z_$1"]
+                  (BinOp "+" (Identifier "y_$2") (Identifier "z_$1"))
+            , Call (Identifier "x_$2") [Identifier "y_$1", NumberLiteral 2]
+            ]
+          )
+        , ( Block
+            [ Let "x" [] (NumberLiteral 1)
+            , Tuple [Identifier "x", Identifier "x"]
+            ]
+          , Block
+            [ Let "x_$1" [] (NumberLiteral 1)
+            , Tuple [Identifier "x_$1", Identifier "x_$1"]
+            ]
+          )
+        ]
     forM_ testSuite $ \(in', out) ->
       it (printf "should rename %s to %s" (show in') (show out)) $ do
         rename (Expr in') `shouldBe` Right (Expr out)
@@ -118,6 +133,35 @@ spec = do
             )
           ]
     forM_ testSuite $ \(in', out) ->
-      it (printf "should rename %s to %s" (show in') (show out)) $ do
+      it (printf "rename %s to %s" (show in') (show out)) $ do
         rename (Expr in') `shouldBe` out
+
+  describe "Declarations" $ do
+    let
+      testSuite =
+        [ (Module "TestModule" [], Module "TestModule" [])
+        , ( Module "TestModule" [Expr $ Let "x" [] (NumberLiteral 1)]
+          , Module "TestModule"
+                   [Expr $ Let "TestModule.x_$1" [] (NumberLiteral 1)]
+          )
+        , (Record "Nil" [], Record "Nil_$1" [])
+        , ( Record "Cons"    ["head", "tail"]
+          , Record "Cons_$1" ["head_$1", "tail_$1"]
+          )
+        , ( Module
+            "TestModule"
+            [ Decl $ Record "Cons" ["head", "tail"]
+            , Expr $ Let "head" [] (NumberLiteral 1)
+            ]
+          , Module
+            "TestModule"
+            [ Decl $ Record "TestModule.Cons_$1"
+                            ["TestModule.head_$1", "TestModule.tail_$1"]
+            , Expr $ Let "TestModule.head_$2" [] (NumberLiteral 1)
+            ]
+          )
+        ]
+    forM_ testSuite $ \(in', out) ->
+      it (printf "renamed %s to %s" (show in') (show out)) $ do
+        rename (Decl in') `shouldBe` Right (Decl out)
 

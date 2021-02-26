@@ -14,24 +14,27 @@ spec = do
     describe "Basic expressions" $ do
       let
         testSuite =
-          [ ("_"    , Underscore)
-          , ("true" , BoolLiteral True)
-          , ("false", BoolLiteral False)
-          , ("trueF", Identifier "trueF")
-          , ("false", BoolLiteral False)
-          , ("1"    , NumberLiteral 1)
-          , ("-1"   , NumberLiteral (-1))
-          , ("(1)"  , NumberLiteral 1)
-          , ("x"    , Identifier "x")
-          , ("x'"   , Identifier "x'")
-          , ("a_b"  , Identifier "a_b")
-          , ("f a"  , Call (Identifier "f") [Identifier "a"])
+          [ ("_"     , Underscore)
+          , ("true"  , BoolLiteral True)
+          , ("false" , BoolLiteral False)
+          , ("trueF" , Identifier "trueF")
+          , ("false" , BoolLiteral False)
+          , ("1"     , NumberLiteral 1)
+          , ("-1"    , NumberLiteral (-1))
+          , ("(1)"   , NumberLiteral 1)
+          , ("()"    , Tuple [])
+          , ("(1, 2)", Tuple [NumberLiteral 1, NumberLiteral 2])
+          , ("x"     , Identifier "x")
+          , ("x'"    , Identifier "x'")
+          , ("a_b"   , Identifier "a_b")
+          , ("f a"   , Call (Identifier "f") [Identifier "a"])
           , ("f a b", Call (Identifier "f") [Identifier "a", Identifier "b"])
           , ( "x+y+z"
             , BinOp "+"
                     (BinOp "+" (Identifier "x") (Identifier "y"))
                     (Identifier "z")
             )
+          , ("(+)"            , OperatorCapture "+")
           , ("let x = 2"      , Let "x" [] (NumberLiteral 2))
           , ("let f a = a"    , Let "f" ["a"] (Identifier "a"))
           , ("{ 2 }"          , Block [NumberLiteral 2])
@@ -178,6 +181,19 @@ spec = do
           it (printf "parses binary operator '%s'" (show op)) $ do
             let result = BinOp op (Identifier "x") (Identifier "y")
             parse (printf "x %s y" op) `shouldBe` Right (Expr result)
+
+  describe "Declarations" $ do
+    let testSuite =
+          [ ("module TestModule", Module "TestModule" [])
+          , ( "module TestModule\nlet x = 1"
+            , Module "TestModule" [Expr $ Let "x" [] (NumberLiteral 1)]
+            )
+          , ("record Nil"           , Record "Nil" [])
+          , ("record Cons head tail", Record "Cons" ["head", "tail"])
+          ]
+    forM_ testSuite $ \(in', out) ->
+      it (printf "parses %s to %s" (show in') (show out)) $ do
+        parse in' `shouldBe` Right (Decl out)
 
 {-
   record (:) head tail

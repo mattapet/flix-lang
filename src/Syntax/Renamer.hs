@@ -28,18 +28,19 @@ type Result a = StateT RenamerState (Either String) a
 data RenamerState = RenamerState
   { state_substitutions     :: [(Name, Name)]
   , state_uniqueNameCounter :: Map String Int
+  , state_moduleName        :: Maybe Name
   }
 
 makeEmptyState :: RenamerState
-makeEmptyState = RenamerState [] empty
-
+makeEmptyState = RenamerState [] empty Nothing
 getSubstitutions :: Result [(Name, Name)]
 getSubstitutions = state_substitutions <$> get
 
 setSubstitutions :: [(Name, Name)] -> Result ()
 setSubstitutions subs = do
   counts <- getNameCounter
-  put $ RenamerState subs counts
+  name   <- getModuleName
+  put $ RenamerState subs counts name
 
 getNameCounter :: Result (Map String Int)
 getNameCounter = state_uniqueNameCounter <$> get
@@ -47,7 +48,17 @@ getNameCounter = state_uniqueNameCounter <$> get
 setNameCounter :: Map String Int -> Result ()
 setNameCounter counts = do
   subs <- getSubstitutions
-  put $ RenamerState subs counts
+  name <- getModuleName
+  put $ RenamerState subs counts name
+
+getModuleName :: Result (Maybe Name)
+getModuleName = state_moduleName <$> get
+
+setModuleName :: Name -> Result ()
+setModuleName name = do
+  subs   <- getSubstitutions
+  counts <- getNameCounter
+  put $ RenamerState subs counts (Just name)
 
 incrementCountForName :: Name -> Result Int
 incrementCountForName x = do
@@ -68,14 +79,17 @@ rename = (fst <$>) . flip runStateT makeEmptyState . rename'
 
 rename' :: AST -> Result AST
 rename' (Expr e) = Expr <$> renameExpr e
+rename' (Decl d) = Decl <$> renameDecl d
 
--- Renaming Expressions
+-- Expressions
 
 renameExpr :: Expr -> Result Expr
-renameExpr Underscore          = return Underscore
-renameExpr val@BoolLiteral{}   = return val
-renameExpr val@NumberLiteral{} = return val
-renameExpr (Identifier x)      = Identifier . lookupVar <$> getSubstitutions
+renameExpr Underscore            = return Underscore
+renameExpr val@BoolLiteral{}     = return val
+renameExpr val@NumberLiteral{}   = return val
+renameExpr val@OperatorCapture{} = return val
+renameExpr (Tuple      values)   = Tuple <$> traverse renameExpr values
+renameExpr (Identifier x     )   = Identifier . lookupVar <$> getSubstitutions
   where lookupVar subs = fromMaybe x $ lookup x subs
 
 renameExpr (BinOp op lhs rhs) =
@@ -103,6 +117,16 @@ renameCaseExpr :: CaseExpr -> Result CaseExpr
 renameCaseExpr (pattern, value) =
   liftA2 (,) (renameExpr pattern) (renameExpr value)
 
+-- Declarations
+
+renameDecl :: Decl -> Result Decl
+renameDecl (Module name contents) = do
+  setModuleName name
+  Module name <$> traverse rename' contents
+
+renameDecl (Record name fields) =
+  liftA2 Record (introduceVariable name) (introduceVariables fields)
+
 -- Helper functions
 
 pushFrame :: Result a -> Result a
@@ -116,8 +140,10 @@ introduceVariables = uniq >=> traverse introduceVariable
 
 introduceVariable :: Name -> Result Name
 introduceVariable x = do
-  nextId <- incrementCountForName x
-  let x' = x ++ "_$" ++ show nextId
+  nextId  <- incrementCountForName x
+  module' <- getModuleName
+  let pref = maybe "" (++ ".") module'
+  let x'   = pref ++ x ++ "_$" ++ show nextId
   bindNameSub x x'
   return x'
 

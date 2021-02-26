@@ -14,9 +14,14 @@ spec = do
   describe "Atoms" $ do
     let
       testSuite =
-        [ (S.BoolLiteral True               , C.Lit (C.Bool True))
-        , (S.NumberLiteral 1                , C.Lit (C.Int 1))
-        , (S.Identifier "x"                 , C.Var "x")
+        [ (S.BoolLiteral True   , C.Lit (C.Bool True))
+        , (S.NumberLiteral 1    , C.Lit (C.Int 1))
+        , (S.Identifier "x"     , C.Var "x")
+        , (S.OperatorCapture "+", C.Var "+")
+        , (S.Tuple []           , C.Lam "_$1" (C.Var "_$1"))
+        , ( S.Tuple [S.Identifier "x", S.Identifier "y"]
+          , C.Lam "_$1" (C.App (C.App (C.Var "_$1") (C.Var "x")) (C.Var "y"))
+          )
         , (S.Lambda ["x"] (S.Identifier "x"), C.Lam "x" (C.Var "x"))
         , ( S.Lambda ["x", "y"] (S.Identifier "x")
           , C.Lam "x" (C.Lam "y" (C.Var "x"))

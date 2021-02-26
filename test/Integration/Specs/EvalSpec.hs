@@ -64,8 +64,7 @@ spec = do
         in'
           = "{\n\
               \  let flip f = { x y => f y x }\n\
-              \  let diff x y = x - y         \n\
-              \  (flip diff) 5 10\n\
+              \  (flip (-)) 5 10\n\
               \}"
       let out = LitV (Int 5)
       show <$> run in' `shouldBe` Right (show out)

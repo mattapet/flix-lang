@@ -12,9 +12,14 @@ desugar (S.Expr e) = fst <$> runStateT (desugarE e) 0
 type Result a = StateT Int (Either String) a
 
 desugarE :: S.Expr -> Result C.CoreExpr
-desugarE (S.BoolLiteral   x     ) = return $ C.Lit $ C.Bool x
-desugarE (S.NumberLiteral x     ) = return $ C.Lit $ C.Int x
-desugarE (S.Identifier    x     ) = return $ C.Var x
+desugarE (S.BoolLiteral     x     ) = return $ C.Lit $ C.Bool x
+desugarE (S.NumberLiteral   x     ) = return $ C.Lit $ C.Int x
+desugarE (S.Identifier      x     ) = return $ C.Var x
+desugarE (S.OperatorCapture x     ) = return $ C.Var x
+desugarE (S.Tuple           fields) = do
+  nextId' <- nextId
+  fields' <- traverse desugarE fields
+  return $ C.Lam nextId' (foldl C.App (C.Var nextId') fields')
 desugarE (S.Lambda [arg   ] body) = C.Lam arg <$> desugarE body
 desugarE (S.Lambda (x : xs) body) = C.Lam x <$> desugarE (S.Lambda xs body)
 

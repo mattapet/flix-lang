@@ -34,7 +34,18 @@ anySpaces :: Parsec String u ()
 anySpaces = skipMany anySpace
 
 keywords :: [String]
-keywords = ["if", "then", "else", "let", "true", "false", "match", "case"]
+keywords =
+  [ "if"
+  , "then"
+  , "else"
+  , "let"
+  , "true"
+  , "false"
+  , "match"
+  , "case"
+  , "module"
+  , "record"
+  ]
 
 -- Atoms
 
@@ -47,6 +58,9 @@ identifier = spaces *> identifier' <* spaces
     identifier' = (:) <$> letter <*> many identifierChar >>= failOnKeyword
     failOnKeyword x | x `elem` keywords = fail ""
                     | otherwise         = return x
+
+operator :: Parsec String u String
+operator = spaces *> many1 (oneOf "+-*/=<>|&") <* spaces
 
 underscore :: Parsec String u Expr
 underscore = spaces *> underscore' <* spaces
@@ -78,7 +92,13 @@ block = Block <$> (spaces *> braces body <* spaces)
     body = many expr
 
 parens :: Parsec String u Expr
-parens = spaces *> char '(' *> expr <* char ')' <* spaces
+parens = spaces *> char '(' *> expr' <* char ')' <* spaces
+  where
+    expr' = try (OperatorCapture <$> operator) <|> tuple
+    tuple = expr `sepBy` char ',' >>= \case
+      [x] -> return x
+      xs  -> return $ Tuple xs
+
 
 atom :: Parsec String u Expr
 atom = foldl1 (<|>) atoms
@@ -110,8 +130,7 @@ factor = foldl1 (<|>) factors
 -- Terms
 
 binop :: Parsec String u Expr
-binop = factor `chainl1` op
-  where op = BinOp <$> (spaces *> many1 (oneOf "+-*/=<>|&") <* spaces)
+binop = factor `chainl1` op where op = BinOp <$> operator
 
 term :: Parsec String u Expr
 term = foldl1 (<|>) terms where terms = try <$> [binop, factor]
@@ -150,6 +169,23 @@ expr =
     *> (try letBinding <|> try matchExpr <|> try ifExpr <|> try term)
     <* anySpaces
 
+-- Declarations
+
+moduleDecl :: Parsec String u Decl
+moduleDecl = Module <$> (moduleKw *> identifier) <*> many ast
+  where moduleKw = string "module" <* space
+
+record :: Parsec String u Decl
+record = Record <$> (recordKw *> identifier) <*> many identifier
+  where recordKw = string "record" <* space
+
+decl :: Parsec String u Decl
+decl = anySpaces *> (try moduleDecl <|> try record) <* anySpaces
+
+
+ast :: Parsec String u AST
+ast = (Decl <$> try decl) <|> (Expr <$> try expr)
+
 parse :: String -> Either String AST
-parse = mapLeft show . runParser (Expr <$> expr <* eof) () ""
+parse = mapLeft show . runParser (ast <* eof) () ""
   where mapLeft f = either (Left . f) Right
