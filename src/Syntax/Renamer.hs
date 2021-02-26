@@ -4,8 +4,12 @@ module Syntax.Renamer
   ( rename
   ) where
 
+import           Control.Applicative            ( liftA2
+                                                , liftA3
+                                                )
 import           Control.Monad                  ( (>=>) )
 import           Control.Monad.StateT
+import           Data.Functor                   ( ($>) )
 import           Data.List                      ( intercalate
                                                 , intersect
                                                 )
@@ -17,100 +21,108 @@ import           Data.Map                       ( (!?)
 import           Data.Maybe                     ( fromMaybe )
 import           Syntax.Core
 
-type Env = Map String Int
-type Names = [(Name, Name)]
-type Result a = StateT Env (Either String) a
+
+type Result a = StateT RenamerState (Either String) a
+
+-- Renaming State
+data RenamerState = RenamerState
+  { state_substitutions     :: [(Name, Name)]
+  , state_uniqueNameCounter :: Map String Int
+  }
+
+makeEmptyState :: RenamerState
+makeEmptyState = RenamerState [] empty
+
+getSubstitutions :: Result [(Name, Name)]
+getSubstitutions = state_substitutions <$> get
+
+setSubstitutions :: [(Name, Name)] -> Result ()
+setSubstitutions subs = do
+  counts <- getNameCounter
+  put $ RenamerState subs counts
+
+getNameCounter :: Result (Map String Int)
+getNameCounter = state_uniqueNameCounter <$> get
+
+setNameCounter :: Map String Int -> Result ()
+setNameCounter counts = do
+  subs <- getSubstitutions
+  put $ RenamerState subs counts
+
+incrementCountForName :: Name -> Result Int
+incrementCountForName x = do
+  counts <- getNameCounter
+  let nextId = maybe 1 (+ 1) $ counts !? x
+  setNameCounter $ insert x nextId counts
+  return nextId
+
+bindNameSub :: Name -> Name -> Result ()
+bindNameSub name sub = do
+  subs <- getSubstitutions
+  setSubstitutions $ (name, sub) : subs
+
+-- Renaming
 
 rename :: AST -> Either String AST
-rename = (fst <$>) . flip runStateT empty . rename' []
+rename = (fst <$>) . flip runStateT makeEmptyState . rename'
 
-rename' :: Names -> AST -> Result AST
-rename' ns (Expr e) = Expr <$> renameE ns e
+rename' :: AST -> Result AST
+rename' (Expr e) = Expr <$> renameExpr e
 
-renameE :: Names -> Expr -> Result Expr
-renameE _  Underscore          = return Underscore
-renameE _  val@BoolLiteral{}   = return val
-renameE _  val@NumberLiteral{} = return val
+-- Renaming Expressions
 
-renameE ns (Identifier x)      = return $ Identifier x'
-  where x' = fromMaybe x $ lookup x ns
+renameExpr :: Expr -> Result Expr
+renameExpr Underscore          = return Underscore
+renameExpr val@BoolLiteral{}   = return val
+renameExpr val@NumberLiteral{} = return val
+renameExpr (Identifier x)      = Identifier . lookupVar <$> getSubstitutions
+  where lookupVar subs = fromMaybe x $ lookup x subs
 
-renameE ns (BinOp op lhs rhs) = do
-  lhs' <- renameE ns lhs
-  rhs' <- renameE ns rhs
-  return $ BinOp op lhs' rhs'
+renameExpr (BinOp op lhs rhs) =
+  liftA2 (BinOp op) (renameExpr lhs) (renameExpr rhs)
 
-renameE ns (Call callee args) = do
-  callee' <- renameE ns callee
-  args'   <- traverse (renameE ns) args
-  return $ Call callee' args'
+renameExpr (Call callee args) =
+  liftA2 Call (renameExpr callee) (traverse renameExpr args)
 
-renameE ns (Let name args body) = do
-  (name' : args', body') <- renameContext
-  return $ Let name' args' body'
-  where
-    renameContext = do
-      ns'   <- renameVariables (name : args)
-      body' <- (renameE $ ns' ++ ns) body
-      let vars' = snd <$> ns'
-      return (vars', body')
+renameExpr (Let name args body) = do
+  name' <- introduceVariable name -- Introduce new name of the current level
+  pushFrame $ liftA2 (Let name') (introduceVariables args) (renameExpr body)
 
-renameE ns (If cond then' else') = do
-  cond'  <- renameE ns cond
-  then'' <- renameE ns then'
-  else'' <- renameE ns else'
-  return $ If cond' then'' else''
+renameExpr (If cond then' else') =
+  liftA3 If (renameExpr cond) (renameExpr then') (renameExpr else')
 
-renameE ns (Block exprs      ) = Block <$> renameBlock ns exprs
+renameExpr (Lambda args body) =
+  pushFrame $ liftA2 Lambda (introduceVariables args) (renameExpr body)
 
-renameE ns (Match value cases) = do
-  value' <- renameE ns value
-  cases' <- traverse (renameCase ns) cases
-  return $ Match value' cases'
-  where
-    renameCase ns' (Identifier var, branch) = do
-      [(var', varRenamed)] <- renameVariables [var]
-      (Identifier varRenamed, ) <$> renameE ((var', varRenamed) : ns') branch
-    renameCase ns' (ptr, branch) = (ptr, ) <$> renameE ns' branch
+renameExpr (Block exprs) = pushFrame $ Block <$> traverse renameExpr exprs
 
-renameE ns (Lambda args body) = do
-  ns'   <- renameVariables args
-  body' <- renameE (ns' ++ ns) body
-  let args' = snd <$> ns'
-  return $ Lambda args' body'
+renameExpr (Match value caseExprs) =
+  liftA2 Match (renameExpr value) (traverse renameCaseExpr caseExprs)
+
+renameCaseExpr :: CaseExpr -> Result CaseExpr
+renameCaseExpr (pattern, value) =
+  liftA2 (,) (renameExpr pattern) (renameExpr value)
 
 -- Helper functions
 
-renameBlock :: [(Name, Name)] -> [Expr] -> Result [Expr]
-renameBlock _  [] = return []
-renameBlock ns (Let name args body : remainingBlock) = do
-  (let', ns')     <- renameLet
-  remainingBlock' <- renameBlock ns' remainingBlock
-  return $ let' : remainingBlock'
-  where
-    renameLet = do
-      ns'   <- renameVariables (name : args)
-      body' <- (renameE $ ns' ++ ns) body
-      let (name' : args') = snd <$> ns'
-      let renamedLetName  = head ns'
-      return (Let name' args' body', renamedLetName : ns)
+pushFrame :: Result a -> Result a
+pushFrame f = do
+  pre    <- getSubstitutions
+  result <- f
+  setSubstitutions pre $> result
 
-renameBlock ns (x : xs) = do
-  x' <- renameE ns x
-  (x' :) <$> renameBlock ns xs
+introduceVariables :: [Name] -> Result [Name]
+introduceVariables = uniq >=> traverse introduceVariable
 
-renameVariables :: [Name] -> Result [(Name, Name)]
-renameVariables = uniqueNames >=> traverse renameVariable
-  where
-    renameVariable x = do
-      env <- get
-      let nextId = maybe 1 (+ 1) $ env !? x
-      let x'     = x ++ "_$" ++ show nextId
-      put (insert x nextId env)
-      return (x, x')
+introduceVariable :: Name -> Result Name
+introduceVariable x = do
+  nextId <- incrementCountForName x
+  let x' = x ++ "_$" ++ show nextId
+  bindNameSub x x'
+  return x'
 
-uniqueNames :: [Name] -> Result [Name]
-uniqueNames names = case conflictingNames names [] of
+uniq :: [Name] -> Result [Name]
+uniq names = case conflictingNames names [] of
   []        -> return names
   conflicts -> fail $ formatConflicts conflicts
   where

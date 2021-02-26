@@ -28,6 +28,9 @@ spec = do
         , ( Let "x"    ["a"]    (Identifier "a")
           , Let "x_$1" ["a_$1"] (Identifier "a_$1")
           )
+        , ( Let "f"    ["f"]    (Identifier "f")
+          , Let "f_$1" ["f_$2"] (Identifier "f_$2")
+          )
         , ( Let "f" ["x"] (BinOp "+" (Identifier "x") (Identifier "x"))
           , Let "f_$1"
                 ["x_$1"]
@@ -84,33 +87,30 @@ spec = do
       let out = Lambda ["x_$1"] (Identifier "x_$1")
       rename (Expr in') `shouldBe` Right (Expr out)
 
-  describe "Match expressions" $ do
-    it "renames branch variables" $ do
-      let
-        in' =
-          Let "f" ["x"] (Match (Identifier "x") [(Underscore, Identifier "x")])
-      let out = Let
-            "f_$1"
-            ["x_$1"]
-            (Match (Identifier "x_$1") [(Underscore, Identifier "x_$1")])
-      rename (Expr in') `shouldBe` Right (Expr out)
-    it "introduce new names on variable capture" $ do
-      let
-        in' = Let "f"
-                  ["x"]
-                  (Match (Identifier "x") [(Identifier "y", Identifier "y")])
-      let out = Let
-            "f_$1"
-            ["x_$1"]
-            (Match (Identifier "x_$1") [(Identifier "y_$1", Identifier "y_$1")])
-      rename (Expr in') `shouldBe` Right (Expr out)
+  -- describe "Match expressions" $ do
+  --   it "renames branch variables" $ do
+  --     let
+  --       in' =
+  --         Let "f" ["x"] (Match (Identifier "x") [(Underscore, Identifier "x")])
+  --     let out = Let
+  --           "f_$1"
+  --           ["x_$1"]
+  --           (Match (Identifier "x_$1") [(Underscore, Identifier "x_$1")])
+  --     rename (Expr in') `shouldBe` Right (Expr out)
+  --   it "introduce new names on variable capture" $ do
+  --     let
+  --       in' = Let "f"
+  --                 ["x"]
+  --                 (Match (Identifier "x") [(Identifier "y", Identifier "y")])
+  --     let out = Let
+  --           "f_$1"
+  --           ["x_$1"]
+  --           (Match (Identifier "x_$1") [(Identifier "y_$1", Identifier "y_$1")])
+  --     rename (Expr in') `shouldBe` Right (Expr out)
 
   describe "Conflicting definitions detections" $ do
     let testSuite =
-          [ ( Let "f" ["f"] (Identifier "f")
-            , Left "Conflicting definition for symbols 'f'"
-            )
-          , ( Let "f" ["a", "a"] (Identifier "f")
+          [ ( Let "f" ["a", "a"] (Identifier "f")
             , Left "Conflicting definition for symbols 'a'"
             )
           , ( Let "f" ["a", "a", "b", "c", "c"] (Identifier "f")

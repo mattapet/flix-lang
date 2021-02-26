@@ -20,9 +20,10 @@ desugarE (S.Lambda (x : xs) body) = C.Lam x <$> desugarE (S.Lambda xs body)
 
 desugarE (S.BinOp op x y        ) = desugarE $ S.Call (S.Identifier op) [x, y]
 desugarE (S.Call x      []      ) = desugarE x
-desugarE (S.Call callee (x : xs)) = inner >>= flip (foldlM wrapApp) xs
+desugarE (S.Call callee (x : xs)) = inner >>= transformNestedCalls xs
   where
-    inner = C.App <$> desugarE callee <*> desugarE x
+    inner                = C.App <$> desugarE callee <*> desugarE x
+    transformNestedCalls = flip (foldlM wrapApp)
     wrapApp callee' arg = C.App callee' <$> desugarE arg
 
 -- Maybe an error here???

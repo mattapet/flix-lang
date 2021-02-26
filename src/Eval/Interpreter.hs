@@ -1,6 +1,6 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Eval.Interpreter
   ( eval
@@ -9,6 +9,7 @@ module Eval.Interpreter
 import           Control.Applicative            ( (<|>)
                                                 , liftA2
                                                 )
+import           Control.Monad.Extra            ( bind2 )
 import           Control.Monad.StateT
 import           Data.Functor                   ( ($>) )
 import qualified Data.Map                      as Map
@@ -35,13 +36,12 @@ eval' (Var x       ) = lookupVariable x
 eval' (Lam arg body) = do
   env <- getEnv
   return $ LambdaV env arg body
+
 eval' (App  callee        arg    ) = bind2 apply (eval' callee) (eval' arg)
-eval' (Bind (name, value) context) = do
-  env    <- getEnv
-  value' <- eval' value
-  setEnv $ Map.insert name value' env
-  result <- eval' context
-  setEnv env $> result
+
+eval' (Bind (name, value) context) = pushFrame $ do
+  eval' value >>= bindValue name
+  eval' context
 
 eval' (Case value patterns) = do
   value' <- eval' value
@@ -50,11 +50,9 @@ eval' (Case value patterns) = do
 
 apply :: Value -> Value -> Result Value
 apply (BuiltinV _ fn       ) value = Result $ liftStateM $ fn value
-apply (LambdaV env arg body) value = do
-  originalEnv <- getEnv
-  setEnv $ Map.insert arg value env <> originalEnv
-  result <- eval' body
-  setEnv originalEnv $> result
+apply (LambdaV env arg body) value = pushFrame $ switchContext env $ do
+  bindValue arg value
+  eval' body
 apply expr _ = fail $ "Expression '" ++ show expr ++ "' is not callable"
 
 patternMatch :: [Pattern] -> Value -> Result (Maybe Value)
@@ -76,12 +74,21 @@ patternMatch' _ _ = return Nothing
 lookupVariable :: Name -> Result Value
 lookupVariable x = do
   env <- getEnv
-  case env Map.!? x of
-    Just v  -> return v
-    Nothing -> fail $ "Unbound variable '" ++ x ++ "'"
+  unpack $ env Map.!? x
+  where
+    unpack (Just v) = return v
+    unpack Nothing  = fail $ "Unbound variable '" ++ x ++ "'"
 
+bindValue :: Name -> Value -> Result ()
+bindValue name value = getEnv >>= setEnv . Map.insert name value
 
--- Utilities
+pushFrame :: Result a -> Result a
+pushFrame f = do
+  env    <- getEnv
+  result <- f
+  setEnv env $> result
 
-bind2 :: (Monad m) => (a -> b -> m c) -> m a -> m b -> m c
-bind2 f ma mb = liftA2 (,) ma mb >>= uncurry f
+switchContext :: Environment -> Result a -> Result a
+switchContext env f = pushFrame $ do
+  baseEnv <- getEnv
+  setEnv (env <> baseEnv) >> f
