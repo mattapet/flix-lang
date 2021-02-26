@@ -108,7 +108,6 @@ spec = do
               (C.Var "x")
               [ C.LitP (C.Bool True) (C.Var "y")
               , C.LitP (C.Bool False) (C.Var "z")
-              , C.ErrorP
               ]
             )
           , ( S.Match
@@ -118,19 +117,15 @@ spec = do
               ]
             , C.Case
               (C.Var "x")
-              [ C.LitP (C.Int 1) (C.Var "y")
-              , C.LitP (C.Bool True) (C.Var "z")
-              , C.ErrorP
-              ]
+              [C.LitP (C.Int 1) (C.Var "y"), C.LitP (C.Bool True) (C.Var "z")]
             )
           , ( S.Match
               (S.Identifier "x")
               [ (S.NumberLiteral 1, S.Identifier "y")
               , (S.Underscore     , S.Identifier "z")
               ]
-            , C.Case
-              (C.Var "x")
-              [C.LitP (C.Int 1) (C.Var "y"), C.Default (C.Var "z"), C.ErrorP]
+            , C.Case (C.Var "x")
+                     [C.LitP (C.Int 1) (C.Var "y"), C.DefaultP (C.Var "z")]
             )
           ]
     forM_ testSuite $ \(in', out) ->

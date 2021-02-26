@@ -25,10 +25,20 @@ type Bind = (Name, Arg)
 
 data Pattern =
     LitP Literal CoreExpr
-  | Default CoreExpr
-  | ErrorP
+  | DefaultP CoreExpr
   deriving (Show, Eq)
 
+data CaseResult =
+    Match Value
+  | Fail
+  deriving Show
+
+instance Semigroup CaseResult where
+  val@Match{} <> _ = val
+  Fail        <> x = x
+
+instance Monoid CaseResult where
+  mempty = Fail
 
 -- Values
 

@@ -6,7 +6,9 @@ module Eval.Interpreter
   ( eval
   ) where
 
-import           Control.Applicative            ( liftA2 )
+import           Control.Applicative            ( (<|>)
+                                                , liftA2
+                                                )
 import           Control.Monad.StateT
 import           Data.Functor                   ( ($>) )
 import qualified Data.Map                      as Map
@@ -41,16 +43,35 @@ eval' (Bind (name, value) context) = do
   result <- eval' context
   setEnv env $> result
 
+eval' (Case value patterns) = do
+  value' <- eval' value
+  result <- patternMatch patterns value'
+  maybe (fail "failure") return result
+
 apply :: Value -> Value -> Result Value
 apply (BuiltinV _ fn       ) value = Result $ liftStateM $ fn value
 apply (LambdaV env arg body) value = do
   originalEnv <- getEnv
-  _           <- setEnv $ Map.insert arg value env
-  result      <- eval' body
+  setEnv $ Map.insert arg value env <> originalEnv
+  result <- eval' body
   setEnv originalEnv $> result
 apply expr _ = fail $ "Expression '" ++ show expr ++ "' is not callable"
 
+patternMatch :: [Pattern] -> Value -> Result (Maybe Value)
+patternMatch [] _ = return Nothing
+patternMatch (x : xs) value =
+  liftA2 (<|>) (patternMatch' x value) (patternMatch xs value)
 
+patternMatch' :: Pattern -> Value -> Result (Maybe Value)
+patternMatch' (DefaultP result) _ = Just <$> eval' result
+-- Matching literals
+patternMatch' (LitP (Int x) result) (LitV (Int y))
+  | x == y    = Just <$> eval' result
+  | otherwise = return Nothing
+patternMatch' (LitP (Bool x) result) (LitV (Bool y))
+  | x == y    = Just <$> eval' result
+  | otherwise = return Nothing
+patternMatch' _ _ = return Nothing
 
 lookupVariable :: Name -> Result Value
 lookupVariable x = do

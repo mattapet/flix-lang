@@ -39,18 +39,17 @@ desugarE (S.If cond then' else') = do
   cond'  <- desugarE cond
   then'' <- desugarE then'
   else'' <- desugarE else'
-  return $ C.Case
-    cond'
-    [C.LitP (C.Bool True) then'', C.LitP (C.Bool False) else'', C.ErrorP]
+  return
+    $ C.Case cond' [C.LitP (C.Bool True) then'', C.LitP (C.Bool False) else'']
 
 desugarE (S.Match value cases) = do
   value' <- desugarE value
   cases' <- traverse desugarCase cases
-  return $ C.Case value' (cases' ++ [C.ErrorP])
+  return $ C.Case value' cases'
   where
     desugarCase (S.BoolLiteral   x, expr) = C.LitP (C.Bool x) <$> desugarE expr
     desugarCase (S.NumberLiteral x, expr) = C.LitP (C.Int x) <$> desugarE expr
-    desugarCase (S.Underscore     , expr) = C.Default <$> desugarE expr
+    desugarCase (S.Underscore     , expr) = C.DefaultP <$> desugarE expr
 
 
 desugarE _ = undefined

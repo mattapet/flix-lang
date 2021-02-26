@@ -27,9 +27,12 @@ library
   exposed-modules:
       Control.Monad.State
       Control.Monad.StateT
+      Eval.Builtin
       Eval.Core
+      Eval.Interpreter
       Lib
       Syntax.Core
+      Syntax.Desugar
       Syntax.Parser
       Syntax.Renamer
   other-modules:
@@ -61,6 +64,10 @@ test-suite flix-lang-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Eval.Specs.InterpreterBasicsSpec
+      Eval.Specs.PatternMatchingSpec
+      Integration.Specs.EvalSpec
+      Syntax.Specs.DesugarSpec
       Syntax.Specs.ParserSpec
       Syntax.Specs.RenamerSpec
       Paths_flix_lang
