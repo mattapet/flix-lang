@@ -141,9 +141,65 @@ spec = do
             [(S.Tuple [S.NumberLiteral 1, S.NumberLiteral 2], S.Identifier "y")]
           , C.Case
             (C.Var "x")
-            [(C.TupleP [C.LitP $ C.Int 1, C.LitP $ C.Int 2], (C.Var "y"))]
+            [(C.TupleP [C.LitP $ C.Int 1, C.LitP $ C.Int 2], C.Var "y")]
           )
         ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
         desugar (S.Expr in') `shouldBe` Right out
+
+  describe "Declarations" $ do
+    let
+      tesSuite =
+        [ ( S.Module
+            "TestModule"
+            [ S.Expr $ S.Let "x" [] (S.Identifier "x")
+            , S.Expr $ S.Identifier "x"
+            ]
+          , C.Bind ("x", C.Var "x") (C.Var "x")
+          )
+        , ( S.Module "TestModule"
+                     [S.Decl $ S.Record "Nil" [], S.Expr $ S.Identifier "x"]
+          , C.Bind ("Nil", C.Lam "_$1" (C.Var "_$1")) (C.Var "x")
+          )
+        , ( S.Module
+            "TestModule"
+            [ S.Decl $ S.Record "Cons" ["head", "tail"]
+            , S.Expr $ S.Identifier "x"
+            ]
+          , C.Bind
+            ( "Cons"
+            , C.Lam
+              "head"
+              (C.Lam
+                "tail"
+                (C.Lam
+                  "_$3"
+                  (C.App (C.App (C.Var "_$3") (C.Var "head")) (C.Var "tail"))
+                )
+              )
+            )
+            (C.Bind
+              ( "head"
+              , C.Lam
+                "_$1"
+                (C.App (C.Var "_$1")
+                       (C.Lam "head" (C.Lam "tail" (C.Var "head")))
+                )
+              )
+              (C.Bind
+                ( "tail"
+                , C.Lam
+                  "_$2"
+                  (C.App (C.Var "_$2")
+                         (C.Lam "head" (C.Lam "tail" (C.Var "tail")))
+                  )
+                )
+                (C.Var "x")
+              )
+            )
+          )
+        ]
+    forM_ tesSuite $ \(in', out) ->
+      it (printf "translates declaration %s" (show in')) $ do
+        desugar (S.Decl in') `shouldBe` Right out

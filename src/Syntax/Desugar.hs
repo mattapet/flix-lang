@@ -1,5 +1,8 @@
 {-# LANGUAGE TupleSections #-}
-module Syntax.Desugar where
+
+module Syntax.Desugar
+  ( desugar
+  ) where
 
 import           Control.Applicative            ( liftA2 )
 import           Control.Monad.StateT
@@ -9,9 +12,15 @@ import qualified Eval.Core                     as C
 import qualified Syntax.Core                   as S
 
 desugar :: S.AST -> Either String C.CoreExpr
-desugar (S.Expr e) = fst <$> runStateT (desugarExpr e) 0
+desugar ast = fst <$> runStateT (desugar' ast) 0
 
 type Result a = StateT Int (Either String) a
+
+desugar' :: S.AST -> Result C.CoreExpr
+desugar' (S.Expr e) = desugarExpr e
+desugar' (S.Decl e) = desugarDecl e
+
+-- Expressions
 
 desugarExpr :: S.Expr -> Result C.CoreExpr
 desugarExpr (S.BoolLiteral     x     ) = return $ C.Lit $ C.Bool x
@@ -29,11 +38,11 @@ desugarExpr (S.Lambda (x : xs) body) =
 desugarExpr (S.BinOp op x y) = desugarExpr $ S.Call (S.Identifier op) [x, y]
 
 desugarExpr (S.Call x []) = desugarExpr x
-desugarExpr (S.Call callee (x : xs)) = inner >>= transformNestedCalls xs
+desugarExpr (S.Call callee (x : xs)) = inner >>= mkApps xs
   where
-    inner                = C.App <$> desugarExpr callee <*> desugarExpr x
-    transformNestedCalls = flip (foldlM wrapApp)
-    wrapApp callee' arg = C.App callee' <$> desugarExpr arg
+    inner  = C.App <$> desugarExpr callee <*> desugarExpr x
+    mkApps = flip (foldlM mkApp)
+    mkApp callee' arg = C.App callee' <$> desugarExpr arg
 
 -- Maybe an error here???
 desugarExpr (S.Let n args body) = do
@@ -68,6 +77,29 @@ desugarExpr (S.Match value cases) = do
 
 
 desugarExpr _ = undefined
+
+
+-- Declarations
+
+desugarDecl :: S.Decl -> Result C.CoreExpr
+desugarDecl d = desugarDecl' d >>= desugarBlockExprs
+
+desugarDecl' :: S.Decl -> Result [S.Expr]
+desugarDecl' (S.Module _ body) = concat <$> traverse transformToExpr' body
+  where
+    transformToExpr' (S.Decl d) = desugarDecl' d
+    transformToExpr' (S.Expr e) = return [e]
+
+desugarDecl' (S.Record constr fields) = (constructor :) <$> accessors
+  where
+    constructor = S.Let constr fields (S.Tuple (S.Identifier <$> fields))
+    accessors   = traverse generateAccessor fields
+    generateAccessor name = do
+      id' <- nextId
+      return $ S.Let
+        name
+        [id']
+        (S.Call (S.Identifier id') [S.Lambda fields (S.Identifier name)])
 
 -- Helper functions
 

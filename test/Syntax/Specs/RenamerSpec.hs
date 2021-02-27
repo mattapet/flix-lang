@@ -183,3 +183,8 @@ spec = do
       it (printf "renamed %s to %s" (show in') (show out)) $ do
         rename (Decl in') `shouldBe` Right (Decl out)
 
+    it "fails upon module re-declaration" $ do
+      let input = Decl $ Module "M1" [Decl $ Module "M2" []]
+      rename input
+        `shouldBe` Left "Unexpected module re-declaration of module 'M1'"
+

@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 
 module Syntax.Renamer
@@ -126,8 +127,13 @@ renameCaseExpr (pattern, value) = pushFrame $ do
 
 renameDecl :: Decl -> Result Decl
 renameDecl (Module name contents) = do
+  getModuleName >>= checkForModuleRedeclaration
   setModuleName name
   Module name <$> traverse rename' contents
+  where
+    checkForModuleRedeclaration Nothing = return ()
+    checkForModuleRedeclaration (Just name') =
+      fail $ "Unexpected module re-declaration of module '" ++ name' ++ "'"
 
 renameDecl (Record name fields) =
   liftA2 Record (introduceVariable name) (introduceVariables fields)
