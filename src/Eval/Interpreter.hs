@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -7,6 +8,7 @@ module Eval.Interpreter
   ) where
 
 import           Control.Applicative            ( (<|>)
+                                                , Alternative(..)
                                                 , liftA2
                                                 )
 import           Control.Monad.Extra            ( bind2 )
@@ -20,6 +22,12 @@ newtype Result a = Result { runResult :: StateT Environment (Either String) a }
 
 instance MonadFail Result where
   fail = Result . liftStateM . Left
+
+instance Alternative Result where
+  empty = fail ""
+  Result x <|> Result y = Result $ StateT $ \s -> case runStateT x s of
+    val@Right{} -> val
+    Left _      -> runStateT y s
 
 getEnv :: Result Environment
 getEnv = Result get
@@ -43,10 +51,12 @@ eval' (Bind (name, value) context) = pushFrame $ do
   eval' value >>= bindValue name
   eval' context
 
-eval' (Case value patterns) = do
+eval' (Case value patterns) = pushFrame $ do
   value' <- eval' value
   result <- patternMatch patterns value'
-  maybe (fail "failure") return result
+  maybe (fail "Pattern match fallthrough") eval' result
+
+-- Lambda applications
 
 apply :: Value -> Value -> Result Value
 apply (BuiltinV _ fn       ) value = Result $ liftStateM $ fn value
@@ -55,23 +65,44 @@ apply (LambdaV env arg body) value = pushFrame $ switchContext env $ do
   eval' body
 apply expr _ = fail $ "Expression '" ++ show expr ++ "' is not callable"
 
-patternMatch :: [PatternCase] -> Value -> Result (Maybe Value)
-patternMatch [] _ = return Nothing
-patternMatch (x : xs) value =
-  liftA2 (<|>) (patternMatch' x value) (patternMatch xs value)
+-- Pattern matching
 
-patternMatch' :: PatternCase -> Value -> Result (Maybe Value)
-patternMatch' (DefaultP, result) _ = Just <$> eval' result
+patternMatch :: [PatternCase] -> Value -> Result (Maybe CoreExpr)
+patternMatch []       _     = return Nothing
+patternMatch (x : xs) value = do
+  liftA2 (<|>) (tryMatch x value) (patternMatch xs value)
+  where tryMatch x' = (<|> return Nothing) . patternMatch' x'
+
+patternMatch' :: PatternCase -> Value -> Result (Maybe CoreExpr)
+patternMatch' (DefaultP, result) _ = return $ Just result
 -- Matching literals
 patternMatch' (LitP (Int x), result) (LitV (Int y))
-  | x == y    = Just <$> eval' result
+  | x == y    = return $ Just result
   | otherwise = return Nothing
 patternMatch' (LitP (Bool x), result) (LitV (Bool y))
-  | x == y    = Just <$> eval' result
+  | x == y    = return $ Just result
   | otherwise = return Nothing
+
 -- Matching variables
-patternMatch' (VarP name, result) value =
-  bindValue name value >> Just <$> eval' result
+patternMatch' (VarP   name, result) value = bindValue name value $> Just result
+
+-- Matching tuples
+patternMatch' (TupleP []  , result) value = apply value trueVal >>= matchTrue
+  where
+    trueVal   = LitV $ Bool True
+    truePat   = LitP $ Bool True
+    matchTrue = patternMatch' (truePat, result)
+
+patternMatch' (TupleP (x : xs), result) value = do
+  head' <- first tupleLength value
+  tail' <- dropFirst tupleLength value
+  patternMatch' (x, result) head' >>= continue tail'
+  where
+    tupleLength = length (x : xs)
+    continue rest (Just _) = patternMatch' (TupleP xs, result) rest
+    continue _    Nothing  = return Nothing
+
+-- Unrecognized pattern
 patternMatch' _ _ = return Nothing
 
 lookupVariable :: Name -> Result Value
@@ -95,3 +126,21 @@ switchContext :: Environment -> Result a -> Result a
 switchContext env f = pushFrame $ do
   baseEnv <- getEnv
   setEnv (env <> baseEnv) >> f
+
+-- Tuple helpers
+
+first :: Int -> Value -> Result Value
+first n v = eval' (select' 1 n) >>= apply v
+
+dropFirst :: Int -> Value -> Result Value
+dropFirst n v = eval' (drop' 1 n) >>= apply v
+
+select' :: Int -> Int -> CoreExpr
+select' x n = foldr (Lam . ("$" ++) . show) (Var $ "$" ++ show x) [1 .. n]
+
+drop' :: Int -> Int -> CoreExpr
+drop' d n = foldr (Lam . ("$" ++) . show) apply' [1 .. n]
+  where
+    apply' = Lam "_" (foldl App (Var "_") (Var . ("$" ++) . show <$> range))
+    range | n == d    = []
+          | otherwise = [(n - (d - 1)) .. n]

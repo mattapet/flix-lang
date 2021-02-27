@@ -116,12 +116,12 @@ spec = do
       describe "Match expressions" $ do
         let
           testSuite =
-            [ ( "match x {\n\
+            [ ( "match 1 {\n\
                 \  case true  => 1\n\
                 \  case false => 0\n\
                 \}"
               , Match
-                (Identifier "x")
+                (NumberLiteral 1)
                 [ (BoolLiteral True , NumberLiteral 1)
                 , (BoolLiteral False, NumberLiteral 0)
                 ]

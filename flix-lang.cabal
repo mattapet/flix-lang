@@ -25,6 +25,7 @@ source-repository head
 
 library
   exposed-modules:
+      Control.Monad.ExceptT
       Control.Monad.Extra
       Control.Monad.State
       Control.Monad.StateT

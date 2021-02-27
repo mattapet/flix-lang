@@ -3,6 +3,7 @@ module Eval.Specs.PatternMatchingSpec
   ) where
 
 import           Control.Monad                  ( forM_ )
+import           Data.Map                       ( empty )
 import           Eval.Builtin
 import           Eval.Core
 import           Eval.Interpreter               ( eval )
@@ -36,4 +37,11 @@ spec = do
     forM_ testSuite $ \(ptr, in', out) ->
       it (printf "should match %s on pattern %s" (show in') (show ptr)) $ do
         show . fst <$> eval builtins (Case in' ptr) `shouldBe` Right (show out)
+
+  describe "Tuple matching" $ do
+    it "matches tuple (1, 2)" $ do
+      let in' = Lam "p" (App (App (Var "p") (Lit $ Int 1)) (Lit $ Int 2))
+      let ptr = [(TupleP [LitP $ Int 1, LitP $ Int 2], Lit $ Bool True)]
+      let out = LitV $ Bool True
+      show . fst <$> eval builtins (Case in' ptr) `shouldBe` Right (show out)
 

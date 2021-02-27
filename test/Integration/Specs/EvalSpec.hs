@@ -69,6 +69,86 @@ spec = do
       let out = LitV (Int 5)
       show <$> run in' `shouldBe` Right (show out)
 
+    it "matches empty tuple" $ do
+      let
+        in'
+          = "{\n\
+            \   match () {\n\
+            \     case () => true\n\
+            \     case _ => false\n\
+            \   }\n\
+            \}"
+      let out = LitV (Bool True)
+      show <$> run in' `shouldBe` Right (show out)
+
+    it "matches 2-tuple (1, 2)" $ do
+      let
+        in'
+          = "{\n\
+            \   match (1, 2) {\n\
+            \     case (2, 2) => true\n\
+            \     case (1, 2) => true\n\
+            \     case _ => false\n\
+            \   }\n\
+            \}"
+      let out = LitV (Bool True)
+      show <$> run in' `shouldBe` Right (show out)
+
+    it "matches 2-tuple (1, 2) with variable capture" $ do
+      let
+        in'
+          = "{\n\
+            \   match (1, 2) {\n\
+            \     case (2, 2) => true\n\
+            \     case (1, x) => x\n\
+            \     case _ => false\n\
+            \   }\n\
+            \}"
+      let out = LitV (Int 2)
+      show <$> run in' `shouldBe` Right (show out)
+
+    it "matches nested tuple (1, (2, 3)) with variable capture" $ do
+      let
+        in'
+          = "{\n\
+            \   match (1, (2, 3)) {\n\
+            \     case (2, 2) => true\n\
+            \     case (x, (2, 3)) => x\n\
+            \   }\n\
+            \}"
+      let out = LitV (Int 1)
+      show <$> run in' `shouldBe` Right (show out)
+
+    it "matches default underscore when no patterns are matched" $ do
+      let
+        in'
+          = "{\n\
+            \   match (1, 2) {\n\
+            \     case (2, 2) => true\n\
+            \     case (x, (2, 3)) => x\n\
+            \     case _ => false\n\
+            \   }\n\
+            \}"
+      let out = LitV (Bool False)
+      show <$> run in' `shouldBe` Right (show out)
+
+    it "working with tuples like lists" $ do
+      let
+        in'
+          = "{\n\
+            \   let head x = (x)\n\
+            \   let tail x = match x { \n\
+            \     case () => ()\n\
+            \     case (_, tail) => tail\n\
+            \   }\n\
+            \   let length xs = match xs {\n\
+            \      case () => 0\n\
+            \      case (_, tail) => 1 + length tail\n\
+            \   }\n\
+            \   length (1, (2, (3, (4, (5, ())))))\n\
+            \}"
+      let out = LitV (Int 5)
+      show <$> run in' `shouldBe` Right (show out)
 
 run :: String -> Either String Value
 run = parse >=> rename >=> desugar >=> (fst <$>) . eval builtins

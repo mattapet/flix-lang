@@ -9,64 +9,65 @@ import qualified Eval.Core                     as C
 import qualified Syntax.Core                   as S
 
 desugar :: S.AST -> Either String C.CoreExpr
-desugar (S.Expr e) = fst <$> runStateT (desugarE e) 0
+desugar (S.Expr e) = fst <$> runStateT (desugarExpr e) 0
 
 type Result a = StateT Int (Either String) a
 
-desugarE :: S.Expr -> Result C.CoreExpr
-desugarE (S.BoolLiteral     x     ) = return $ C.Lit $ C.Bool x
-desugarE (S.NumberLiteral   x     ) = return $ C.Lit $ C.Int x
-desugarE (S.Identifier      x     ) = return $ C.Var x
-desugarE (S.OperatorCapture x     ) = return $ C.Var x
-desugarE (S.Tuple           fields) = do
+desugarExpr :: S.Expr -> Result C.CoreExpr
+desugarExpr (S.BoolLiteral     x     ) = return $ C.Lit $ C.Bool x
+desugarExpr (S.NumberLiteral   x     ) = return $ C.Lit $ C.Int x
+desugarExpr (S.Identifier      x     ) = return $ C.Var x
+desugarExpr (S.OperatorCapture x     ) = return $ C.Var x
+desugarExpr (S.Tuple           fields) = do
   nextId' <- nextId
-  fields' <- traverse desugarE fields
+  fields' <- traverse desugarExpr fields
   return $ C.Lam nextId' (foldl C.App (C.Var nextId') fields')
-desugarE (S.Lambda [arg   ] body) = C.Lam arg <$> desugarE body
-desugarE (S.Lambda (x : xs) body) = C.Lam x <$> desugarE (S.Lambda xs body)
+desugarExpr (S.Lambda [arg] body) = C.Lam arg <$> desugarExpr body
+desugarExpr (S.Lambda (x : xs) body) =
+  C.Lam x <$> desugarExpr (S.Lambda xs body)
 
-desugarE (S.BinOp op x y        ) = desugarE $ S.Call (S.Identifier op) [x, y]
-desugarE (S.Call x      []      ) = desugarE x
-desugarE (S.Call callee (x : xs)) = inner >>= transformNestedCalls xs
+desugarExpr (S.BinOp op x y) = desugarExpr $ S.Call (S.Identifier op) [x, y]
+
+desugarExpr (S.Call x []) = desugarExpr x
+desugarExpr (S.Call callee (x : xs)) = inner >>= transformNestedCalls xs
   where
-    inner                = C.App <$> desugarE callee <*> desugarE x
+    inner                = C.App <$> desugarExpr callee <*> desugarExpr x
     transformNestedCalls = flip (foldlM wrapApp)
-    wrapApp callee' arg = C.App callee' <$> desugarE arg
+    wrapApp callee' arg = C.App callee' <$> desugarExpr arg
 
 -- Maybe an error here???
-desugarE (S.Let n args body) = do
-  body' <- desugarE body
+desugarExpr (S.Let n args body) = do
+  body' <- desugarExpr body
   let fn = foldr C.Lam body' args
   id' <- nextId
   return $ C.Lam id' (C.Bind (n, fn) (C.Var id'))
 
-desugarE (S.Block xs           ) = desugarBlockExprs xs
+desugarExpr (S.Block xs           ) = desugarBlockExprs xs
 
 
-desugarE (S.If cond then' else') = do
-  cond'  <- desugarE cond
-  then'' <- desugarE then'
-  else'' <- desugarE else'
-  return $ C.Case
-    cond'
-    [(C.LitP (C.Bool True), then''), (C.LitP (C.Bool False), else'')]
+desugarExpr (S.If cond then' else') = do
+  liftA2 C.Case (desugarExpr cond) conditionalPattern
+  where
+    then''             = (C.LitP (C.Bool True), ) <$> desugarExpr then'
+    else''             = (C.LitP (C.Bool False), ) <$> desugarExpr else'
+    conditionalPattern = sequence [then'', else'']
 
-desugarE (S.Match value cases) = do
-  value' <- desugarE value
+desugarExpr (S.Match value cases) = do
+  value' <- desugarExpr value
   cases' <- traverse desugarCase cases
   return $ C.Case value' cases'
   where
     desugarCase (pattern, result) =
-      liftA2 (,) (desugarPattern pattern) (desugarE result)
+      liftA2 (,) (desugarPattern pattern) (desugarExpr result)
     desugarPattern S.Underscore         = return C.DefaultP
     desugarPattern (S.BoolLiteral   x ) = return $ C.LitP $ C.Bool x
     desugarPattern (S.NumberLiteral x ) = return $ C.LitP $ C.Int x
     desugarPattern (S.Identifier    x ) = return $ C.VarP x
     desugarPattern (S.Tuple es) = C.TupleP <$> traverse desugarPattern es
-    desugarPattern _                    = error "Unsupported pattern match"
+    desugarPattern _                    = fail "Unsupported pattern match expr"
 
 
-desugarE _ = undefined
+desugarExpr _ = undefined
 
 -- Helper functions
 
@@ -78,16 +79,16 @@ nextId = do
 desugarBlockExprs :: [S.Expr] -> Result C.CoreExpr
 desugarBlockExprs []                          = fail "Unexpected empty block"
 desugarBlockExprs [S.Let{}] = fail "Illegal binding at the end of the block"
-desugarBlockExprs [x                        ] = desugarE x
+desugarBlockExprs [x                        ] = desugarExpr x
 desugarBlockExprs (S.Let name args body : xs) = do
-  body' <- desugarE body
+  body' <- desugarExpr body
   let fn = foldr C.Lam body' args
   context <- desugarBlockExprs xs
   return $ C.Bind (name, fn) context
 -- Wrap side-effect-y expression withing a noop lambda application that ignores
 -- its argument
 desugarBlockExprs (x : xs) = do
-  sideEffect  <- desugarE x
+  sideEffect  <- desugarExpr x
   context     <- desugarBlockExprs xs
   throwawayId <- nextId
   return $ C.Bind (throwawayId, sideEffect) context
