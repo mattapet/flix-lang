@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 
 module Syntax.Desugar
@@ -6,6 +7,7 @@ module Syntax.Desugar
 
 import           Control.Applicative            ( liftA2 )
 import           Control.Monad.StateT
+import           Data.Bifunctor                 ( first )
 import           Data.Foldable                  ( foldlM )
 import           Data.Functor                   ( ($>) )
 import qualified Eval.Core                     as C
@@ -31,6 +33,7 @@ desugarExpr (S.Tuple           fields) = do
   nextId' <- nextId
   fields' <- traverse desugarExpr fields
   return $ C.Lam nextId' (foldl C.App (C.Var nextId') fields')
+
 desugarExpr (S.Lambda [arg] body) = C.Lam arg <$> desugarExpr body
 desugarExpr (S.Lambda (x : xs) body) =
   C.Lam x <$> desugarExpr (S.Lambda xs body)
@@ -40,7 +43,7 @@ desugarExpr (S.BinOp op x y) = desugarExpr $ S.Call (S.Identifier op) [x, y]
 desugarExpr (S.Call x []) = desugarExpr x
 desugarExpr (S.Call callee (x : xs)) = inner >>= mkApps xs
   where
-    inner  = C.App <$> desugarExpr callee <*> desugarExpr x
+    inner  = liftA2 C.App (desugarExpr callee) (desugarExpr x)
     mkApps = flip (foldlM mkApp)
     mkApp callee' arg = C.App callee' <$> desugarExpr arg
 
@@ -51,8 +54,8 @@ desugarExpr (S.Let n args body) = do
   id' <- nextId
   return $ C.Lam id' (C.Bind (n, fn) (C.Var id'))
 
+desugarExpr (S.LetMatch n cases   ) = simplifyLetMatch n cases >>= desugarExpr
 desugarExpr (S.Block xs           ) = desugarBlockExprs xs
-
 
 desugarExpr (S.If cond then' else') = do
   liftA2 C.Case (desugarExpr cond) conditionalPattern
@@ -62,22 +65,45 @@ desugarExpr (S.If cond then' else') = do
     conditionalPattern = sequence [then'', else'']
 
 desugarExpr (S.Match value cases) = do
-  value' <- desugarExpr value
-  cases' <- traverse desugarCase cases
-  return $ C.Case value' cases'
+  liftA2 C.Case (desugarExpr value) (traverse desugarCaseExpr cases)
   where
-    desugarCase (pattern, result) =
-      liftA2 (,) (desugarPattern pattern) (desugarExpr result)
-    desugarPattern S.Underscore         = return C.DefaultP
-    desugarPattern (S.BoolLiteral   x ) = return $ C.LitP $ C.Bool x
-    desugarPattern (S.NumberLiteral x ) = return $ C.LitP $ C.Int x
-    desugarPattern (S.Identifier    x ) = return $ C.VarP x
-    desugarPattern (S.Tuple es) = C.TupleP <$> traverse desugarPattern es
-    desugarPattern _                    = fail "Unsupported pattern match expr"
+    desugarCaseExpr (pattern, result) =
+      liftA2 (,) (go_casePattern pattern) (desugarExpr result)
+
+    go_casePattern S.Underscore         = return C.DefaultP
+    go_casePattern (S.BoolLiteral   x ) = return $ C.LitP $ C.Bool x
+    go_casePattern (S.NumberLiteral x ) = return $ C.LitP $ C.Int x
+    go_casePattern (S.Identifier    x ) = return $ C.VarP x
+    go_casePattern (S.Tuple es) = C.TupleP <$> traverse go_casePattern es
+    go_casePattern _                    = fail "Unsupported pattern match expr"
 
 
 desugarExpr _ = undefined
 
+simplifyLetMatch :: S.Name -> [([S.Expr], S.Expr)] -> Result S.Expr
+simplifyLetMatch n cases@[(args, body)] = case collect_argNames args of
+  Just args' -> return $ S.Let n args' body
+  Nothing    -> translateToCaseExpr n cases
+  where
+    collect_argNames = traverse collect_argName
+    collect_argName (S.Identifier x) = Just x
+    collect_argName _                = Nothing
+simplifyLetMatch n cases = translateToCaseExpr n cases
+
+translateToCaseExpr :: S.Name -> [([S.Expr], S.Expr)] -> Result S.Expr
+translateToCaseExpr n cases = all_same_length cases >> do
+  let argLen = length $ fst $ head cases
+  args' <- traverse (const nextId) [1 .. argLen]
+  let body' = S.Match (S.Tuple (S.Identifier <$> args')) case_patterns
+  return $ S.Let n args' body'
+
+  where
+    case_patterns = first S.Tuple <$> cases
+
+    all_same_length [] = return []
+    all_same_length (x : xs)
+      | all (\y -> length x == length y) xs = all_same_length xs
+      | otherwise = fail "Let bindings with different amount of arguments"
 
 -- Declarations
 
@@ -113,10 +139,13 @@ desugarBlockExprs []                          = fail "Unexpected empty block"
 desugarBlockExprs [S.Let{}] = fail "Illegal binding at the end of the block"
 desugarBlockExprs [x                        ] = desugarExpr x
 desugarBlockExprs (S.Let name args body : xs) = do
-  body' <- desugarExpr body
-  let fn = foldr C.Lam body' args
+  fn      <- mkLam body
   context <- desugarBlockExprs xs
   return $ C.Bind (name, fn) context
+  where mkLam = (flip (foldr C.Lam) args <$>) . desugarExpr
+
+desugarBlockExprs (S.LetMatch n cs : xs) =
+  simplifyLetMatch n cs >>= desugarBlockExprs . (: xs)
 -- Wrap side-effect-y expression withing a noop lambda application that ignores
 -- its argument
 desugarBlockExprs (x : xs) = do

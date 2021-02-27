@@ -34,16 +34,18 @@ spec = do
                     (BinOp "+" (Identifier "x") (Identifier "y"))
                     (Identifier "z")
             )
-          , ("(+)"            , OperatorCapture "+")
-          , ("let x = 2"      , Let "x" [] (NumberLiteral 2))
-          , ("let f a = a"    , Let "f" ["a"] (Identifier "a"))
-          , ("{ 2 }"          , Block [NumberLiteral 2])
-          , ("let f a = { a }", Let "f" ["a"] (Block [Identifier "a"]))
+          , ("(+)"        , OperatorCapture "+")
+          , ("let x = 2"  , LetMatch "x" [([], NumberLiteral 2)])
+          , ("let f a = a", LetMatch "f" [([Identifier "a"], Identifier "a")])
+          , ("{ 2 }"      , Block [NumberLiteral 2])
+          , ( "let f a = { a }"
+            , LetMatch "f" [([Identifier "a"], Block [Identifier "a"])]
+            )
           , ( "{\n\
             \  let x = 2\n\
             \  x\n\
             \}"
-            , Block [Let "x" [] (NumberLiteral 2), Identifier "x"]
+            , Block [LetMatch "x" [([], NumberLiteral 2)], Identifier "x"]
             )
           , ( "if true then 1 else 2"
             , If (BoolLiteral True) (NumberLiteral 1) (NumberLiteral 2)
@@ -62,27 +64,28 @@ spec = do
               \  x + y\n\
               \}"
             , Block
-              [ Let "x" [] (NumberLiteral 2)
-              , Let "y" [] (NumberLiteral 4)
+              [ LetMatch "x" [([], NumberLiteral 2)]
+              , LetMatch "y" [([], NumberLiteral 4)]
               , BinOp "+" (Identifier "x") (Identifier "y")
               ]
             )
-          , ("let id a = a", Let "id" ["a"] (Identifier "a"))
+          , ("let id a = a", LetMatch "id" [([Identifier "a"], Identifier "a")])
           , ( "let factorial n = if n < 1 then 1 else n * factorial (n - 1)"
-            , Let
+            , LetMatch
               "factorial"
-              ["n"]
-              (If
-                (BinOp "<" (Identifier "n") (NumberLiteral 1))
-                (NumberLiteral 1)
-                (BinOp
-                  "*"
-                  (Identifier "n")
-                  (Call (Identifier "factorial")
-                        [BinOp "-" (Identifier "n") (NumberLiteral 1)]
+              [ ( [Identifier "n"]
+                , If
+                  (BinOp "<" (Identifier "n") (NumberLiteral 1))
+                  (NumberLiteral 1)
+                  (BinOp
+                    "*"
+                    (Identifier "n")
+                    (Call (Identifier "factorial")
+                          [BinOp "-" (Identifier "n") (NumberLiteral 1)]
+                    )
                   )
                 )
-              )
+              ]
             )
           , ( "let factorial n = {\n\
             \  let factorial' n acc = if n < 1\n\
@@ -90,23 +93,29 @@ spec = do
             \    else factorial' (n - 1) (n * acc)\n\
             \  factorial' n 1\n\
             \}"
-            , Let
+            , LetMatch
               "factorial"
-              ["n"]
-              (Block
-                [ Let "factorial'" ["n", "acc"] $ If
-                  (BinOp "<" (Identifier "n") (NumberLiteral 1))
-                  (NumberLiteral 1)
-                  (Call
-                    (Identifier "factorial'")
-                    [ BinOp "-" (Identifier "n") (NumberLiteral 1)
-                    , BinOp "*" (Identifier "n") (Identifier "acc")
+              [ ( [Identifier "n"]
+                , Block
+                  [ LetMatch
+                    "factorial'"
+                    [ ( [Identifier "n", Identifier "acc"]
+                      , If
+                        (BinOp "<" (Identifier "n") (NumberLiteral 1))
+                        (NumberLiteral 1)
+                        (Call
+                          (Identifier "factorial'")
+                          [ BinOp "-" (Identifier "n") (NumberLiteral 1)
+                          , BinOp "*" (Identifier "n") (Identifier "acc")
+                          ]
+                        )
+                      )
                     ]
-                  )
-                , Call (Identifier "factorial'")
-                       [Identifier "n", NumberLiteral 1]
-                ]
-              )
+                  , Call (Identifier "factorial'")
+                         [Identifier "n", NumberLiteral 1]
+                  ]
+                )
+              ]
             )
           ]
       forM_ testSuite $ \(in', out) ->
@@ -136,7 +145,8 @@ spec = do
               , Match
                 (Identifier "x")
                 [ ( BoolLiteral True
-                  , Block [Let "x" [] (NumberLiteral 123), Identifier "x"]
+                  , Block
+                    [LetMatch "x" [([], NumberLiteral 123)], Identifier "x"]
                   )
                 , (Underscore, NumberLiteral 0)
                 ]
@@ -160,7 +170,9 @@ spec = do
               , Lambda
                 ["x", "y"]
                 (Block
-                  [ Let "sum" [] (BinOp "+" (Identifier "x") (Identifier "y"))
+                  [ LetMatch
+                    "sum"
+                    [([], BinOp "+" (Identifier "x") (Identifier "y"))]
                   , Identifier "sum"
                   ]
                 )
@@ -173,7 +185,6 @@ spec = do
           it (printf "parses lambda %s" (show in')) $ do
             parse in' `shouldBe` Right (Expr out)
 
-
       describe "operator binary operator parsing" $ do
         let testSuite =
               ["+", "-", "*", "/", "==", "<", ">", "<=", ">=", "&&", "||"]
@@ -182,11 +193,29 @@ spec = do
             let result = BinOp op (Identifier "x") (Identifier "y")
             parse (printf "x %s y" op) `shouldBe` Right (Expr result)
 
+      describe "pattern matching let expressions" $ do
+        let testSuite =
+              [ ("let x () = 0", LetMatch "x" [([Tuple []], NumberLiteral 0)])
+              , ( "let x (1, 2) = 3 \n\
+              \        x  _     = -1"
+                , LetMatch
+                  "x"
+                  [ ( [Tuple [NumberLiteral 1, NumberLiteral 2]]
+                    , NumberLiteral 3
+                    )
+                  , ([Underscore], NumberLiteral (-1))
+                  ]
+                )
+              ]
+        forM_ testSuite $ \(in', out) ->
+          it (printf "parses %s to %s" (show in') (show out)) $ do
+            parse in' `shouldBe` Right (Expr out)
+
   describe "Declarations" $ do
     let testSuite =
           [ ("module TestModule", Module "TestModule" [])
           , ( "module TestModule\nlet x = 1"
-            , Module "TestModule" [Expr $ Let "x" [] (NumberLiteral 1)]
+            , Module "TestModule" [Expr $ LetMatch "x" [([], NumberLiteral 1)]]
             )
           , ("record Nil"           , Record "Nil" [])
           , ("record Cons head tail", Record "Cons" ["head", "tail"])

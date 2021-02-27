@@ -103,6 +103,10 @@ renameExpr (Let name args body) = do
   name' <- introduceVariable name -- Introduce new name of the current level
   pushFrame $ liftA2 (Let name') (introduceVariables args) (renameExpr body)
 
+renameExpr (LetMatch name cases) = do
+  name' <- introduceVariable name -- Introduce new name of the current level
+  LetMatch name' <$> traverse renameCaseLet cases
+
 renameExpr (If cond then' else') =
   liftA3 If (renameExpr cond) (renameExpr then') (renameExpr else')
 
@@ -114,14 +118,23 @@ renameExpr (Block exprs) = pushFrame $ Block <$> traverse renameExpr exprs
 renameExpr (Match value caseExprs) =
   liftA2 Match (renameExpr value) (traverse renameCaseExpr caseExprs)
 
+renameCaseLet :: ([Expr], Expr) -> Result ([Expr], Expr)
+renameCaseLet (args, body) = pushFrame $ do
+  _ <- introduceVariables $ foldMap collect_vars args
+  liftA2 (,) (traverse renameExpr args) (renameExpr body)
+  where
+    collect_vars (Identifier x) = [x]
+    collect_vars (Tuple      t) = foldMap collect_vars t
+    collect_vars _              = []
+
 renameCaseExpr :: CaseExpr -> Result CaseExpr
 renameCaseExpr (pattern, value) = pushFrame $ do
-  _ <- introduceVariables $ collectVariables pattern
+  _ <- introduceVariables $ collect_vars pattern
   liftA2 (,) (renameExpr pattern) (renameExpr value)
   where
-    collectVariables (Identifier x) = [x]
-    collectVariables (Tuple      t) = foldMap collectVariables t
-    collectVariables _              = []
+    collect_vars (Identifier x) = [x]
+    collect_vars (Tuple      t) = foldMap collect_vars t
+    collect_vars _              = []
 
 -- Declarations
 

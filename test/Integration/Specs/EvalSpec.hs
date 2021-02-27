@@ -145,6 +145,81 @@ spec = do
       let out = LitV (Int 5)
       show <$> run in' `shouldBe` Right (show out)
 
+    it "working with tuples like lists" $ do
+      let
+        in'
+          = " module TestModule                   \n\
+            \ let null () = true                  \n\
+            \     null _  = false                 \n\
+            \                                     \n\
+            \ let xs = (1, (2, ()))               \n\
+            \ null xs"
+      let out = LitV (Bool False)
+      show <$> run in' `shouldBe` Right (show out)
+
+    it "working with tuples like lists" $ do
+      let
+        in'
+          = " module TestModule                   \n\
+            \ let null () = true                  \n\
+            \     null _  = false                 \n\
+            \                                     \n\
+            \ let xs = ()                         \n\
+            \ null xs                             "
+      let out = LitV (Bool True)
+      show <$> run in' `shouldBe` Right (show out)
+
+    it "calculates list equality" $ do
+      let
+        in'
+          = " module TestModule                   \n\
+            \ let equals () () = true             \n\
+            \     equals () _  = false            \n\
+            \     equals _  () = false            \n\
+            \     equals (x, xs) (y, ys) =        \n\
+            \       if x == y then equals xs ys   \n\
+            \                 else false          \n\
+            \                                     \n\
+            \ let xs = (1, (2, (3, ())))          \n\
+            \ let ys = (1, (2, (3, ())))          \n\
+            \ equals xs ys                        "
+      let out = LitV (Bool True)
+      show <$> run in' `shouldBe` Right (show out)
+
+    it "calculates list equality" $ do
+      let
+        in'
+          = " module TestModule                   \n\
+            \ let equals () () = true             \n\
+            \     equals () _  = false            \n\
+            \     equals _  () = false            \n\
+            \     equals (x, xs)  (y, ys) =       \n\
+            \       if x == y then equals xs ys   \n\
+            \                 else false          \n\
+            \                                     \n\
+            \ let xs = (1, (5, (3, ())))          \n\
+            \ let ys = (1, (2, (3, ())))          \n\
+            \ equals xs ys                        "
+      let out = LitV (Bool False)
+      show <$> run in' `shouldBe` Right (show out)
+
+    it "calculates list equality" $ do
+      let
+        in'
+          = " module TestModule                   \n\
+            \ let equals () () = true             \n\
+            \     equals () _  = false            \n\
+            \     equals _  () = false            \n\
+            \     equals (x, xs)  (y, ys) =       \n\
+            \       if x == y then equals xs ys   \n\
+            \                 else false          \n\
+            \                                     \n\
+            \ let xs = (1, (2, ()))               \n\
+            \ let ys = (1, (2, (3, ())))          \n\
+            \ equals xs ys                        "
+      let out = LitV (Bool False)
+      show <$> run in' `shouldBe` Right (show out)
+
   describe "records" $ do
     it "Cons record declaration" $ do
       let

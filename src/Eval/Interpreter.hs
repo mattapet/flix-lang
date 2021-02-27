@@ -99,8 +99,12 @@ patternMatch' (TupleP (x : xs), result) value = do
   patternMatch' (x, result) head' >>= continue tail'
   where
     tupleLength = length (x : xs)
-    continue rest (Just _) = patternMatch' (TupleP xs, result) rest
+
+    -- if the current pattern match failed, we short-circuit and return Nothing
     continue _    Nothing  = return Nothing
+    -- if the current pattern match succeeded, we discard its partial result and
+    -- pattern match the tail of the tuple
+    continue rest (Just _) = patternMatch' (TupleP xs, result) rest
 
 -- Unrecognized pattern
 patternMatch' _ _ = return Nothing

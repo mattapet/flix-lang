@@ -57,10 +57,23 @@ spec = do
         [ ( S.Let "x" [] (S.NumberLiteral 1)
           , C.Lam "_$1" (C.Bind ("x", C.Lit (C.Int 1)) (C.Var "_$1"))
           )
+        , ( S.LetMatch "x" [([], S.NumberLiteral 1)]
+          , C.Lam "_$1" (C.Bind ("x", C.Lit (C.Int 1)) (C.Var "_$1"))
+          )
         , ( S.Let "x" ["a"] (S.Identifier "a")
           , C.Lam "_$1" (C.Bind ("x", C.Lam "a" (C.Var "a")) (C.Var "_$1"))
           )
+        , ( S.LetMatch "x" [([S.Identifier "a"], S.Identifier "a")]
+          , C.Lam "_$1" (C.Bind ("x", C.Lam "a" (C.Var "a")) (C.Var "_$1"))
+          )
         , ( S.Let "x" ["a", "b"] (S.Identifier "a")
+          , C.Lam
+            "_$1"
+            (C.Bind ("x", C.Lam "a" (C.Lam "b" (C.Var "a"))) (C.Var "_$1"))
+          )
+        , ( S.LetMatch
+            "x"
+            [([S.Identifier "a", S.Identifier "b"], S.Identifier "a")]
           , C.Lam
             "_$1"
             (C.Bind ("x", C.Lam "a" (C.Lam "b" (C.Var "a"))) (C.Var "_$1"))
@@ -146,6 +159,34 @@ spec = do
         ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
+        desugar (S.Expr in') `shouldBe` Right out
+
+  describe "pattern matching let bindings" $ do
+    let testSuites =
+          [ ( S.LetMatch
+              "l"
+              [ ([S.NumberLiteral 1], S.NumberLiteral 1)
+              , ([S.Underscore]     , S.NumberLiteral 2)
+              ]
+            , C.Lam
+              "_$3"
+              (C.Bind
+                ( "l"
+                , C.Lam
+                  "_$1"
+                  (C.Case
+                    (C.Lam "_$2" (C.App (C.Var "_$2") (C.Var "_$1")))
+                    [ (C.TupleP [C.LitP (C.Int 1)], C.Lit (C.Int 1))
+                    , (C.TupleP [C.DefaultP]      , C.Lit (C.Int 2))
+                    ]
+                  )
+                )
+                (C.Var "_$3")
+              )
+            )
+          ]
+    forM_ testSuites $ \(in', out) ->
+      it (printf "translated %s" (show in')) $ do
         desugar (S.Expr in') `shouldBe` Right out
 
   describe "Declarations" $ do

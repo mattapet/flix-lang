@@ -141,6 +141,25 @@ spec = do
             )
       rename (Expr in') `shouldBe` Right (Expr out)
 
+  describe "Pattern matching let bindings" $ do
+    let testSuite =
+          [ ( LetMatch "x"    [([], NumberLiteral 1)]
+            , LetMatch "x_$1" [([], NumberLiteral 1)]
+            )
+          , ( LetMatch
+              "x"
+              [([Tuple [Identifier "x", Identifier "y"]], Identifier "x")]
+            , LetMatch
+              "x_$1"
+              [ ( [Tuple [Identifier "x_$2", Identifier "y_$1"]]
+                , Identifier "x_$2"
+                )
+              ]
+            )
+          ]
+    forM_ testSuite $ \(in', out) -> it (printf "renames %s" (show in')) $ do
+      rename (Expr in') `shouldBe` Right (Expr out)
+
   describe "Conflicting definitions detections" $ do
     let testSuite =
           [ ( Let "f" ["a", "a"] (Identifier "f")

@@ -6,6 +6,9 @@ module Syntax.Parser
   ( parse
   ) where
 
+import           Control.Applicative            ( liftA2
+                                                , liftA3
+                                                )
 import           Data.Functor                   ( ($>) )
 import           Syntax.Core
 import           Text.Parsec             hiding ( parse
@@ -52,15 +55,22 @@ keywords =
 identifierChar :: Parsec String u Char
 identifierChar = alphaNum <|> oneOf "'_"
 
+operatorChar :: Parsec String u Char
+operatorChar = oneOf "+-*/=<>|&"
+
 identifier :: Parsec String u String
 identifier = spaces *> identifier' <* spaces
   where
-    identifier' = (:) <$> letter <*> many identifierChar >>= failOnKeyword
-    failOnKeyword x | x `elem` keywords = fail ""
+    identifier' = liftA2 (:) letter (many identifierChar) >>= failOnKeyword
+    failOnKeyword x | x `elem` keywords = fail "Unexpected keyword identifier"
                     | otherwise         = return x
 
 operator :: Parsec String u String
-operator = spaces *> many1 (oneOf "+-*/=<>|&") <* spaces
+operator = spaces *> operator' <* spaces
+  where
+    operator' = many1 operatorChar >>= failOnEquals
+    failOnEquals x | x == "="  = fail "Unexpected '=' operator"
+                   | otherwise = return x
 
 underscore :: Parsec String u Expr
 underscore = spaces *> underscore' <* spaces
@@ -82,7 +92,7 @@ lambda :: Parsec String u Expr
 lambda = spaces *> braces body <* spaces
   where
     braces p = char '{' *> p <* char '}'
-    body = Lambda <$> args <*> expr
+    body = liftA2 Lambda args expr
     args = anySpace *> many1 identifier <* spaces <* string "=>" <* spaces
 
 block :: Parsec String u Expr
@@ -117,11 +127,10 @@ atom = foldl1 (<|>) atoms
 -- Factors
 
 call :: Parsec String u Expr
-call = do
-  f <- atom
-  many atom >>= \case
-    []   -> return f
-    args -> return $ Call f args
+call = liftA2 unpack_call_or_ident atom (many atom)
+  where
+    unpack_call_or_ident callee []    = callee
+    unpack_call_or_ident callee args' = Call callee args'
 
 factor :: Parsec String u Expr
 factor = foldl1 (<|>) factors
@@ -138,46 +147,51 @@ term = foldl1 (<|>) terms where terms = try <$> [binop, factor]
 -- Expressions
 
 ifExpr :: Parsec String u Expr
-ifExpr = do
-  cond  <- string "if" *> term <* anySpaces
-  then' <- string "then" *> term <* anySpaces
-  else' <- string "else" *> term
-  return $ If cond then' else'
+ifExpr = liftA3 If cond then' else'
+  where
+    cond  = string "if" *> term <* anySpaces
+    then' = string "then" *> term <* anySpaces
+    else' = string "else" *> term
 
 matchExpr :: Parsec String u Expr
-matchExpr = do
-  value <- string "match" *> term <* spaces
-  cases <- spaces *> braces body <* spaces
-  return $ Match value cases
+matchExpr = liftA2 Match value cases
   where
-    braces p = char '{' *> p <* char '}'
-    body = many caseExpr
-    caseExpr =
-      (,)
-        <$> (anySpaces *> string "case" *> atom)
-        <*> (string "=>" *> spaces *> expr)
+    value = string "match" *> term <* spaces
+    cases = spaces *> braces body <* spaces
 
-letBinding :: Parsec String u Expr
-letBinding = Let <$> (let' *> identifier) <*> args' <* char '=' <*> expr
+    braces p = char '{' *> p <* char '}'
+    body     = many caseExpr
+
+    caseExpr = liftA2 (,)
+                      (anySpaces *> string "case" *> atom)
+                      (string "=>" *> spaces *> expr)
+
+let' :: Parsec String u Expr
+let' = do
+  name         <- letKw *> identifier
+  (args, body) <- matchCase
+  cases        <- many $ try (string name *> matchCase)
+  return $ LetMatch name ((args, body) : cases)
   where
-    let'  = spaces *> string "let" <* spaces
-    args' = many identifier
+    letKw     = spaces *> string "let" <* notFollowedBy identifierChar <* spaces
+    args'     = many atom <* char '=' <* notFollowedBy operatorChar
+    matchCase = liftA2 (,) args' expr
 
 expr :: Parsec String u Expr
 expr =
   anySpaces
-    *> (try letBinding <|> try matchExpr <|> try ifExpr <|> try term)
+    *> (try let' <|> try matchExpr <|> try ifExpr <|> try term)
     <* anySpaces
 
 -- Declarations
 
 moduleDecl :: Parsec String u Decl
-moduleDecl = Module <$> (moduleKw *> identifier) <*> many ast
-  where moduleKw = string "module" <* space
+moduleDecl = liftA2 Module (moduleKw *> identifier) (many ast)
+  where moduleKw = string "module" <* notFollowedBy identifierChar <* space
 
 record :: Parsec String u Decl
-record = Record <$> (recordKw *> identifier) <*> many identifier
-  where recordKw = string "record" <* space
+record = liftA2 Record (recordKw *> identifier) (many identifier)
+  where recordKw = string "record" <* notFollowedBy identifierChar <* space
 
 decl :: Parsec String u Decl
 decl = anySpaces *> (try moduleDecl <|> try record) <* anySpaces

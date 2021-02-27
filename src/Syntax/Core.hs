@@ -16,6 +16,7 @@ data Expr =
   | OperatorCapture OpName
   | Tuple [Expr]
   | Let Name [Name] Expr
+  | LetMatch Name [([Expr], Expr)]
   | If Expr Expr Expr
   | Block [Expr]
   | Match Expr [CaseExpr]
