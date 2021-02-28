@@ -2,11 +2,10 @@ module Syntax.Specs.ParserSpec
   ( spec
   ) where
 
-import           Control.Monad                  ( forM_ )
 import           Syntax.Core
 import           Syntax.Parser                  ( parse )
 import           Test.Hspec
-import           Text.Printf                    ( printf )
+import           Test.Util
 
 spec :: Spec
 spec = do

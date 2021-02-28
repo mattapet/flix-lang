@@ -110,9 +110,7 @@ patternMatch' (TupleP (x : xs), result) value = do
 patternMatch' _ _ = return Nothing
 
 lookupVariable :: Name -> Result Value
-lookupVariable x = do
-  env <- getEnv
-  unpack $ env Map.!? x
+lookupVariable x = getEnv >>= unpack . (Map.!? x)
   where
     unpack (Just v) = return v
     unpack Nothing  = fail $ "Unbound variable '" ++ x ++ "'"
@@ -140,11 +138,16 @@ dropFirst :: Int -> Value -> Result Value
 dropFirst n v = eval' (drop' 1 n) >>= apply v
 
 select' :: Int -> Int -> CoreExpr
-select' x n = foldr (Lam . ("$" ++) . show) (Var $ "$" ++ show x) [1 .. n]
+select' x n = mkLams args selector
+  where
+    args     = toArg <$> [1 .. n]
+    selector = Var $ toArg x
+    toArg    = ("$" ++) . show
 
 drop' :: Int -> Int -> CoreExpr
-drop' d n = foldr (Lam . ("$" ++) . show) apply' [1 .. n]
+drop' d n = foldr (Lam . toArg) apply' [1 .. n]
   where
-    apply' = Lam "_" (foldl App (Var "_") (Var . ("$" ++) . show <$> range))
+    apply' = Lam "_" (Var "_" `mkApps` (Var . toArg <$> range))
     range | n == d    = []
           | otherwise = [(n - (d - 1)) .. n]
+    toArg = ("$" ++) . show

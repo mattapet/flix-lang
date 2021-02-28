@@ -8,7 +8,6 @@ module Syntax.Desugar
 import           Control.Applicative            ( liftA2 )
 import           Control.Monad.StateT
 import           Data.Bifunctor                 ( first )
-import           Data.Foldable                  ( foldlM )
 import           Data.Functor                   ( ($>) )
 import qualified Eval.Core                     as C
 import qualified Syntax.Core                   as S
@@ -40,12 +39,8 @@ desugarExpr (S.Lambda (x : xs) body) =
 
 desugarExpr (S.BinOp op x y) = desugarExpr $ S.Call (S.Identifier op) [x, y]
 
-desugarExpr (S.Call x []) = desugarExpr x
-desugarExpr (S.Call callee (x : xs)) = inner >>= mkApps xs
-  where
-    inner  = liftA2 C.App (desugarExpr callee) (desugarExpr x)
-    mkApps = flip (foldlM mkApp)
-    mkApp callee' arg = C.App callee' <$> desugarExpr arg
+desugarExpr (S.Call callee args) =
+  liftA2 C.mkApps (desugarExpr callee) (traverse desugarExpr args)
 
 -- Maybe an error here???
 desugarExpr (S.Let n args body) = do
@@ -82,6 +77,7 @@ desugarExpr _ = undefined
 
 simplifyLetMatch :: S.Name -> [([S.Expr], S.Expr)] -> Result S.Expr
 simplifyLetMatch n cases@[(args, body)] = case collect_argNames args of
+  -- Return simple let expression if arguments do not contain any patterns
   Just args' -> return $ S.Let n args' body
   Nothing    -> translateToCaseExpr n cases
   where
@@ -92,13 +88,18 @@ simplifyLetMatch n cases = translateToCaseExpr n cases
 
 translateToCaseExpr :: S.Name -> [([S.Expr], S.Expr)] -> Result S.Expr
 translateToCaseExpr n cases = all_same_length cases >> do
-  let argLen = length $ fst $ head cases
-  args' <- traverse (const nextId) [1 .. argLen]
-  let body' = S.Match (S.Tuple (S.Identifier <$> args')) case_patterns
-  return $ S.Let n args' body'
+  args <- get_args
+  let body' = S.Match (go_args args) (go_casePatterns cases)
+  return $ S.Let n args body'
 
   where
-    case_patterns = first S.Tuple <$> cases
+    get_args = traverse (const nextId) [1 .. get_argLen cases]
+
+    get_argLen []              = 0
+    get_argLen ((args, _) : _) = length args
+
+    go_args         = S.Tuple . fmap S.Identifier
+    go_casePatterns = fmap (first S.Tuple)
 
     all_same_length [] = return []
     all_same_length (x : xs)
@@ -111,21 +112,20 @@ desugarDecl :: S.Decl -> Result C.CoreExpr
 desugarDecl d = desugarDecl' d >>= desugarBlockExprs
 
 desugarDecl' :: S.Decl -> Result [S.Expr]
-desugarDecl' (S.Module _ body) = concat <$> traverse transformToExpr' body
+desugarDecl' (S.Module _ body) = concat <$> traverse go_body body
   where
-    transformToExpr' (S.Decl d) = desugarDecl' d
-    transformToExpr' (S.Expr e) = return [e]
+    go_body (S.Decl d) = desugarDecl' d
+    go_body (S.Expr e) = return [e]
 
 desugarDecl' (S.Record constr fields) = (constructor :) <$> accessors
   where
     constructor = S.Let constr fields (S.Tuple (S.Identifier <$> fields))
     accessors   = traverse generateAccessor fields
     generateAccessor name = do
-      id' <- nextId
-      return $ S.Let
-        name
-        [id']
-        (S.Call (S.Identifier id') [S.Lambda fields (S.Identifier name)])
+      arg <- nextId
+      return
+        $ S.Let name [arg] (S.Identifier arg `S.Call` [fieldExtractor name])
+    fieldExtractor = S.Lambda fields . S.Identifier
 
 -- Helper functions
 
@@ -139,17 +139,17 @@ desugarBlockExprs []                          = fail "Unexpected empty block"
 desugarBlockExprs [S.Let{}] = fail "Illegal binding at the end of the block"
 desugarBlockExprs [x                        ] = desugarExpr x
 desugarBlockExprs (S.Let name args body : xs) = do
-  fn      <- mkLam body
+  fn      <- C.mkLams args <$> desugarExpr body
   context <- desugarBlockExprs xs
-  return $ C.Bind (name, fn) context
-  where mkLam = (flip (foldr C.Lam) args <$>) . desugarExpr
+  return $ (name, fn) `C.Bind` context
 
 desugarBlockExprs (S.LetMatch n cs : xs) =
   simplifyLetMatch n cs >>= desugarBlockExprs . (: xs)
+
 -- Wrap side-effect-y expression withing a noop lambda application that ignores
 -- its argument
 desugarBlockExprs (x : xs) = do
   sideEffect  <- desugarExpr x
   context     <- desugarBlockExprs xs
   throwawayId <- nextId
-  return $ C.Bind (throwawayId, sideEffect) context
+  return $ (throwawayId, sideEffect) `C.Bind` context

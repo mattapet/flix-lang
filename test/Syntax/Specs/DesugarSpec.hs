@@ -2,12 +2,11 @@ module Syntax.Specs.DesugarSpec
   ( spec
   ) where
 
-import           Control.Monad                  ( forM_ )
 import qualified Eval.Core                     as C
 import qualified Syntax.Core                   as S
 import           Syntax.Desugar                 ( desugar )
 import           Test.Hspec
-import           Text.Printf                    ( printf )
+import           Test.Util
 
 spec :: Spec
 spec = do

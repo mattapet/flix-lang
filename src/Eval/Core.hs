@@ -2,6 +2,8 @@ module Eval.Core where
 
 import           Data.Map                       ( Map )
 
+infix 4 `Bind`, `mkApps`, `App`
+
 data Literal =
     Bool Bool
   | Int Integer
@@ -46,3 +48,15 @@ instance Show Value where
   show (LitV lit       ) = "LitV " ++ show lit
   show (LambdaV _ arg e) = "LambdaV <env> " ++ show arg ++ " " ++ show e
   show (BuiltinV name _) = "<builtin " ++ name ++ ">"
+
+
+-- Helper building functions
+
+mkApps :: CoreExpr -> [Arg] -> CoreExpr
+mkApps = foldl App
+
+mkLams :: [Name] -> CoreExpr -> CoreExpr
+mkLams args body = foldr Lam body args
+
+mkBinds :: [Bind] -> CoreExpr -> CoreExpr
+mkBinds binds body = foldr Bind body binds

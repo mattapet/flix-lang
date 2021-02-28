@@ -72,6 +72,7 @@ test-suite flix-lang-test
       Syntax.Specs.DesugarSpec
       Syntax.Specs.ParserSpec
       Syntax.Specs.RenamerSpec
+      Test.Util
       Paths_flix_lang
   hs-source-dirs:
       test

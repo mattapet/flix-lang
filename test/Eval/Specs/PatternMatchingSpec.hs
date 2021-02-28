@@ -2,13 +2,12 @@ module Eval.Specs.PatternMatchingSpec
   ( spec
   ) where
 
-import           Control.Monad                  ( forM_ )
 import           Data.Map                       ( empty )
 import           Eval.Builtin
 import           Eval.Core
 import           Eval.Interpreter               ( eval )
 import           Test.Hspec
-import           Text.Printf                    ( printf )
+import           Test.Util
 
 spec :: Spec
 spec = do
