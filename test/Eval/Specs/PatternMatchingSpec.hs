@@ -44,3 +44,14 @@ spec = do
       let out = LitV $ Bool True
       show . fst <$> eval builtins (Case in' ptr) `shouldBe` Right (show out)
 
+    it "matches tuple (1, 2, 3)" $ do
+      let in' = Lam
+            "p"
+            (App (App (App (Var "p") (Lit $ Int 1)) (Lit $ Int 2)) (Lit $ Int 3)
+            )
+      let
+        ptr =
+          [(TupleP [LitP $ Int 1, LitP $ Int 2, LitP $ Int 3], Lit $ Bool True)]
+      let out = LitV $ Bool True
+      show . fst <$> eval builtins (Case in' ptr) `shouldBe` Right (show out)
+

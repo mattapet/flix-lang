@@ -56,7 +56,9 @@ eval' (Bind (name, value) context) = pushFrame $ do
 eval' (Case value patterns) = pushFrame $ do
   value' <- eval' value
   result <- patternMatch patterns value'
-  maybe (fail "Pattern match fallthrough") eval' result
+  maybe (fail $ "Pattern match fallthrough on value " ++ show value')
+        eval'
+        result
 
 -- Lambda applications
 
@@ -149,7 +151,5 @@ select' x n = mkLams args selector
 drop' :: Int -> Int -> CoreExpr
 drop' d n = foldr (Lam . toArg) apply' [1 .. n]
   where
-    apply' = Lam "_" (Var "_" `mkApps` (Var . toArg <$> range))
-    range | n == d    = []
-          | otherwise = [(n - (d - 1)) .. n]
-    toArg = ("$" ++) . show
+    apply' = Lam "_" (Var "_" `mkApps` (Var . toArg <$> [(d + 1) .. n]))
+    toArg  = ("$" ++) . show
