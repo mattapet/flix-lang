@@ -207,15 +207,17 @@ spec = do
       let
         in'
           = " module TestModule                   \n\
+            \ record (:) head tail                \n\
+            \                                     \n\
             \ let equals () () = true             \n\
             \     equals () _  = false            \n\
             \     equals _  () = false            \n\
-            \     equals (x, xs)  (y, ys) =       \n\
+            \     equals (x, xs) (y, ys) =        \n\
             \       if x == y then xs `equals` ys \n\
             \                 else false          \n\
             \                                     \n\
-            \ let xs = (1, (2, ()))               \n\
-            \ let ys = (1, (2, (3, ())))          \n\
+            \ let xs = 1 : 2 : ()                 \n\
+            \ let ys = 1 : 2 : 3 : ()             \n\
             \ xs `equals` ys                        "
       let out = LitV (Bool False)
       show <$> run in' `shouldBe` Right (show out)

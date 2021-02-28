@@ -34,6 +34,11 @@ spec = do
                     (Identifier "z")
             )
           , ("xs `lEq` ys", BinOp "lEq" (Identifier "xs") (Identifier "ys"))
+          , ( "1 : 2 : ()"
+            , BinOp ":"
+                    (NumberLiteral 1)
+                    (BinOp ":" (NumberLiteral 2) (Tuple []))
+            )
           , ("(+)"        , OperatorCapture "+")
           , ("let x = 2"  , LetMatch "x" [([], NumberLiteral 2)])
           , ("let f a = a", LetMatch "f" [([Identifier "a"], Identifier "a")])

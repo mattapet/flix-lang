@@ -9,6 +9,7 @@ module Syntax.Parser
 import           Control.Applicative            ( liftA2
                                                 , liftA3
                                                 )
+import           Control.Monad.Extra            ( bind2 )
 import           Data.Functor                   ( ($>) )
 import           Syntax.Core
 import           Text.Parsec             hiding ( parse
@@ -56,7 +57,7 @@ identifierChar :: Parsec String u Char
 identifierChar = alphaNum <|> oneOf "'_"
 
 operatorChar :: Parsec String u Char
-operatorChar = oneOf "+-*/=<>|&"
+operatorChar = oneOf "+-*/=<>|&:"
 
 identifier :: Parsec String u String
 identifier = spaces *> identifier' <* spaces
@@ -139,10 +140,19 @@ factor = foldl1 (<|>) factors
 -- Terms
 
 binop :: Parsec String u Expr
-binop = factor `chainl1` op
+binop = bind2 go_next factor (optionMaybe operator')
   where
-    op = BinOp <$> (operator <|> escaped identifier)
+    operator' = operator <|> escaped identifier
     escaped p = spaces *> char '`' *> p <* char '`' <* spaces
+
+    go_next x Nothing = return x
+    go_next x (Just op)
+      | last op == ':' = BinOp op x <$> binop
+      | otherwise = do
+        y   <- factor
+        op' <- optionMaybe operator'
+        go_next (BinOp op x y) op'
+
 
 term :: Parsec String u Expr
 term = foldl1 (<|>) terms where terms = try <$> [binop, factor]
@@ -205,8 +215,11 @@ moduleDecl = liftA2 Module (moduleKw *> identifier) (many ast)
   where moduleKw = string "module" <* notFollowedBy identifierChar <* space
 
 record :: Parsec String u Decl
-record = liftA2 Record (recordKw *> identifier) (many identifier)
-  where recordKw = string "record" <* notFollowedBy identifierChar <* space
+record = liftA2 Record (recordKw *> name) (many identifier)
+  where
+    recordKw = string "record" <* notFollowedBy identifierChar <* space
+    name     = identifier <|> parens' operator
+    parens' p = spaces *> char '(' *> p <* char ')' <* spaces
 
 decl :: Parsec String u Decl
 decl = anySpaces *> (try moduleDecl <|> try record) <* anySpaces
