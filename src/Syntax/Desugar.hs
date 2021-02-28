@@ -70,7 +70,8 @@ desugarExpr (S.Match value cases) = do
     go_casePattern (S.NumberLiteral x ) = return $ C.LitP $ C.Int x
     go_casePattern (S.Identifier    x ) = return $ C.VarP x
     go_casePattern (S.Tuple es) = C.TupleP <$> traverse go_casePattern es
-    go_casePattern _                    = fail "Unsupported pattern match expr"
+    go_casePattern e =
+      fail $ "Unsupported pattern match expr '" ++ show e ++ "'"
 
 
 desugarExpr _ = undefined

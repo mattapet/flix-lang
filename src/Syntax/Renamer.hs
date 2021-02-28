@@ -90,11 +90,10 @@ renameExpr val@BoolLiteral{}     = return val
 renameExpr val@NumberLiteral{}   = return val
 renameExpr val@OperatorCapture{} = return val
 renameExpr (Tuple      values)   = Tuple <$> traverse renameExpr values
-renameExpr (Identifier x     )   = Identifier . lookupVar <$> getSubstitutions
-  where lookupVar subs = fromMaybe x $ lookup x subs
+renameExpr (Identifier x     )   = Identifier <$> renameName x
 
 renameExpr (BinOp op lhs rhs) =
-  liftA2 (BinOp op) (renameExpr lhs) (renameExpr rhs)
+  liftA3 BinOp (renameName op) (renameExpr lhs) (renameExpr rhs)
 
 renameExpr (Call callee args) =
   liftA2 Call (renameExpr callee) (traverse renameExpr args)
@@ -117,6 +116,10 @@ renameExpr (Block exprs) = pushFrame $ Block <$> traverse renameExpr exprs
 
 renameExpr (Match value caseExprs) =
   liftA2 Match (renameExpr value) (traverse renameCaseExpr caseExprs)
+
+renameName :: Name -> Result Name
+renameName x = lookupVar <$> getSubstitutions
+  where lookupVar subs = fromMaybe x $ lookup x subs
 
 renameCaseLet :: ([Expr], Expr) -> Result ([Expr], Expr)
 renameCaseLet (args, body) = pushFrame $ do

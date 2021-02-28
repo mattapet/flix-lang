@@ -140,6 +140,27 @@ spec = do
             )
       rename (Expr in') `shouldBe` Right (Expr out)
 
+  describe "Operator let renaming" $ do
+    it "renamed defined let operator" $ do
+      let input = Block
+            [ Let
+              "==="
+              ["lhs", "rhs"]
+              (Call (Identifier "equals") [Identifier "lhs", Identifier "rhs"])
+            , BinOp "===" (Identifier "x") (Identifier "y")
+            ]
+      let output = Block
+            [ Let
+              "===_$1"
+              ["lhs_$1", "rhs_$1"]
+              (Call (Identifier "equals")
+                    [Identifier "lhs_$1", Identifier "rhs_$1"]
+              )
+            , BinOp "===_$1" (Identifier "x") (Identifier "y")
+            ]
+      rename (Expr input) `shouldBe` Right (Expr output)
+
+
   describe "Pattern matching let bindings" $ do
     let testSuite =
           [ ( LetMatch "x"    [([], NumberLiteral 1)]

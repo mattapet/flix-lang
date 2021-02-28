@@ -40,6 +40,13 @@ spec = do
           , ( "let f a = { a }"
             , LetMatch "f" [([Identifier "a"], Block [Identifier "a"])]
             )
+          , ("let (++) = concat", Let "++" [] (Identifier "concat"))
+          , ( "let (===) xs ys = equals xs ys"
+            , Let
+              "==="
+              ["xs", "ys"]
+              (Call (Identifier "equals") [Identifier "xs", Identifier "ys"])
+            )
           , ( "{\n\
             \  let x = 2\n\
             \  x\n\

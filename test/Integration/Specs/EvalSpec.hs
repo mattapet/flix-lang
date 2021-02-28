@@ -220,6 +220,24 @@ spec = do
       let out = LitV (Bool False)
       show <$> run in' `shouldBe` Right (show out)
 
+    it "defines a list equality as operator ===" $ do
+      let
+        in'
+          = " module TestModule                   \n\
+            \ let (===) xs ys = match (xs, ys) {  \n\
+            \     case ((), ()) => true           \n\
+            \     case ((), _)  => false          \n\
+            \     case (_,  ()) => false          \n\
+            \     case ((x, xs), (y, ys)) =>      \n\
+            \       if x == y then xs === ys      \n\
+            \                 else false          \n\
+            \    }                                \n\
+            \ let xs = (1, (2, ()))               \n\
+            \ let ys = (1, (2, (3, ())))          \n\
+            \ xs === ys                           "
+      let out = LitV (Bool False)
+      show <$> run in' `shouldBe` Right (show out)
+
   describe "records" $ do
     it "Cons record declaration" $ do
       let
