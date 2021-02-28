@@ -38,14 +38,22 @@ getEnv = Result get
 setEnv :: Environment -> Result ()
 setEnv = Result . put
 
+getScope :: Result Scope
+getScope = env_scope <$> getEnv
+
+setScope :: Scope -> Result ()
+setScope s = do
+  Environment _ c <- getEnv
+  setEnv $ Environment s c
+
 -- Evaluation
 
 eval' :: CoreExpr -> Result Value
 eval' (Lit x       ) = return $ LitV x
 eval' (Var x       ) = lookupVariable x
 eval' (Lam arg body) = do
-  env <- getEnv
-  return $ LambdaV env arg body
+  scope <- getScope
+  return $ LambdaV scope arg body
 
 eval' (App  callee        arg    ) = bind2 apply (eval' callee) (eval' arg)
 
@@ -56,15 +64,13 @@ eval' (Bind (name, value) context) = pushFrame $ do
 eval' (Case value patterns) = pushFrame $ do
   value' <- eval' value
   result <- patternMatch patterns value'
-  maybe (fail $ "Pattern match fallthrough on value " ++ show value')
-        eval'
-        result
+  maybe (fail "Pattern match fallthrough on value ") eval' result
 
 -- Lambda applications
 
 apply :: Value -> Value -> Result Value
-apply (BuiltinV _ fn       ) value = Result $ liftStateM $ fn value
-apply (LambdaV env arg body) value = pushFrame $ switchContext env $ do
+apply (BuiltinV _ fn         ) value = Result $ liftStateM $ fn value
+apply (LambdaV scope arg body) value = pushFrame $ switchContext scope $ do
   bindValue arg value
   eval' body
 apply expr _ = fail $ "Expression '" ++ show expr ++ "' is not callable"
@@ -114,13 +120,13 @@ patternMatch' (TupleP (x : xs), result) value = do
 patternMatch' _ _ = return Nothing
 
 lookupVariable :: Name -> Result Value
-lookupVariable x = getEnv >>= unpack . (Map.!? x)
+lookupVariable x = getScope >>= unpack . (Map.!? x)
   where
     unpack (Just v) = return v
     unpack Nothing  = fail $ "Unbound variable '" ++ x ++ "'"
 
 bindValue :: Name -> Value -> Result ()
-bindValue name value = getEnv >>= setEnv . Map.insert name value
+bindValue name value = getScope >>= setScope . Map.insert name value
 
 pushFrame :: Result a -> Result a
 pushFrame f = do
@@ -128,10 +134,10 @@ pushFrame f = do
   result <- f
   setEnv env $> result
 
-switchContext :: Environment -> Result a -> Result a
+switchContext :: Scope -> Result a -> Result a
 switchContext env f = pushFrame $ do
-  baseEnv <- getEnv
-  setEnv (env <> baseEnv) >> f
+  baseScope <- getScope
+  setScope (env <> baseScope) >> f
 
 -- Tuple helpers
 

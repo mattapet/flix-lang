@@ -6,21 +6,25 @@ import           Data.Map
 import           Eval.Core
 
 builtins :: Environment
-builtins = fromList
-  [ makeIntBuiltin "+" (\x y -> Int $ x + y)
-  , makeIntBuiltin "-" (\x y -> Int $ x - y)
-  , makeIntBuiltin "*" (\x y -> Int $ x * y)
-  , makeIntBuiltin "/" (\x y -> Int $ x `div` y)
-  , makeIntBuiltin "%" (\x y -> Int $ x `mod` y)
-  , makeBoolBuiltin "&&" (&&)
-  , makeBoolBuiltin "||" (||)
-  , equals
-  , nequals
-  , makeIntBuiltin "<"  (\x y -> Bool $ x < y)
-  , makeIntBuiltin ">"  (\x y -> Bool $ x > y)
-  , makeIntBuiltin "<=" (\x y -> Bool $ x <= y)
-  , makeIntBuiltin ">=" (\x y -> Bool $ x >= y)
-  ]
+builtins = Environment
+  (fromList
+    [ makeIntBuiltin "+" (\x y -> Int $ x + y)
+    , makeIntBuiltin "-" (\x y -> Int $ x - y)
+    , makeIntBuiltin "*" (\x y -> Int $ x * y)
+    , makeIntBuiltin "/" (\x y -> Int $ x `div` y)
+    , makeIntBuiltin "%" (\x y -> Int $ x `mod` y)
+    , makeBoolBuiltin "&&" (&&)
+    , makeBoolBuiltin "||" (||)
+    , equals
+    , nequals
+    , makeIntBuiltin "<"  (\x y -> Bool $ x < y)
+    , makeIntBuiltin ">"  (\x y -> Bool $ x > y)
+    , makeIntBuiltin "<=" (\x y -> Bool $ x <= y)
+    , makeIntBuiltin ">=" (\x y -> Bool $ x >= y)
+    ]
+  )
+  mempty
+
 
 equals :: (Name, Value)
 equals = makeBuiltinBinop "==" (\l r -> Right $ Bool $ l == r)

@@ -35,20 +35,34 @@ data Pattern =
 
 -- Values
 
-type Environment = Map Name Value
+type Scope = Map Name Value
+type Constructors = Map Name Ty
+
+data Environment = Environment
+  { env_scope  :: Scope
+  , env_constr :: Constructors
+  }
 
 type Builtin = Value -> Either String Value
 
 data Value =
     LitV Literal
-  | LambdaV Environment Name CoreExpr
+  | LambdaV Scope Name CoreExpr
   | BuiltinV Name Builtin
 
 instance Show Value where
   show (LitV lit       ) = "LitV " ++ show lit
-  show (LambdaV _ arg e) = "LambdaV <env> " ++ show arg ++ " " ++ show e
+  show (LambdaV _ arg e) = "<λ: " ++ " " ++ show arg ++ " " ++ show e ++ ">"
   show (BuiltinV name _) = "<builtin " ++ name ++ ">"
 
+
+-- Types
+
+data Ty =
+    AnyTy
+  | NominalTy String
+  | Ty :~> Ty
+  deriving (Show, Eq)
 
 -- Helper building functions
 

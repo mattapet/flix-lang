@@ -2,6 +2,7 @@ module Syntax.Specs.DesugarSpec
   ( spec
   ) where
 
+import qualified Data.Map                      as Map
 import qualified Eval.Core                     as C
 import qualified Syntax.Core                   as S
 import           Syntax.Desugar                 ( desugar )
@@ -28,7 +29,7 @@ spec = do
         ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        desugar (S.Expr in') `shouldBe` Right out
+        (fst <$> desugar (S.Expr in')) `shouldBe` Right out
 
   describe "Calls" $ do
     let testSuite =
@@ -48,7 +49,7 @@ spec = do
           ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        desugar (S.Expr in') `shouldBe` Right out
+        (fst <$> desugar (S.Expr in')) `shouldBe` Right out
 
   describe "Basic Bindings" $ do
     let
@@ -80,7 +81,7 @@ spec = do
         ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        desugar (S.Expr in') `shouldBe` Right out
+        (fst <$> desugar (S.Expr in')) `shouldBe` Right out
 
   describe "Bindings in Blocks" $ do
     let testSuite =
@@ -104,7 +105,7 @@ spec = do
           ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        desugar (S.Expr in') `shouldBe` Right out
+        (fst <$> desugar (S.Expr in')) `shouldBe` Right out
 
   describe "Invalid blocks" $ do
     let testSuite =
@@ -115,7 +116,7 @@ spec = do
           ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        desugar (S.Expr in') `shouldBe` Left out
+        (fst <$> desugar (S.Expr in')) `shouldBe` Left out
 
 
   describe "Case expressions" $ do
@@ -158,7 +159,7 @@ spec = do
         ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        desugar (S.Expr in') `shouldBe` Right out
+        (fst <$> desugar (S.Expr in')) `shouldBe` Right out
 
   describe "pattern matching let bindings" $ do
     let testSuites =
@@ -186,7 +187,7 @@ spec = do
           ]
     forM_ testSuites $ \(in', out) ->
       it (printf "translated %s" (show in')) $ do
-        desugar (S.Expr in') `shouldBe` Right out
+        (fst <$> desugar (S.Expr in')) `shouldBe` Right out
 
   describe "Declarations" $ do
     let
@@ -197,10 +198,12 @@ spec = do
             , S.Expr $ S.Identifier "x"
             ]
           , C.Bind ("x", C.Var "x") (C.Var "x")
+          , mempty
           )
         , ( S.Module "TestModule"
                      [S.Decl $ S.Record "Nil" [], S.Expr $ S.Identifier "x"]
           , C.Bind ("Nil", C.Lam "_$1" (C.Var "_$1")) (C.Var "x")
+          , Map.fromList [("Nil", C.NominalTy "Nil")]
           )
         , ( S.Module
             "TestModule"
@@ -238,8 +241,10 @@ spec = do
                 (C.Var "x")
               )
             )
+          , Map.fromList
+            [("Cons", C.AnyTy C.:~> (C.AnyTy C.:~> C.NominalTy "Cons"))]
           )
         ]
-    forM_ tesSuite $ \(in', out) ->
+    forM_ tesSuite $ \(in', out, ty) ->
       it (printf "translates declaration %s" (show in')) $ do
-        desugar (S.Decl in') `shouldBe` Right out
+        desugar (S.Decl in') `shouldBe` Right (out, ty)

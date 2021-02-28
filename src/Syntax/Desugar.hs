@@ -9,13 +9,46 @@ import           Control.Applicative            ( liftA2 )
 import           Control.Monad.StateT
 import           Data.Bifunctor                 ( first )
 import           Data.Functor                   ( ($>) )
+import qualified Data.Map                      as Map
 import qualified Eval.Core                     as C
 import qualified Syntax.Core                   as S
 
-desugar :: S.AST -> Either String C.CoreExpr
-desugar ast = fst <$> runStateT (desugar' ast) 0
+desugar :: S.AST -> Either String (C.CoreExpr, C.Constructors)
+desugar ast = unwrap <$> runStateT (desugar' ast) makeEmptyState
+  where unwrap = (state_constructors <$>)
 
-type Result a = StateT Int (Either String) a
+data DesugarState = DesugarState
+  { state_uniqueNameCounter :: Int
+  , state_constructors      :: C.Constructors
+  }
+
+makeEmptyState :: DesugarState
+makeEmptyState = DesugarState 0 mempty
+
+getState :: Result DesugarState
+getState = get
+
+setState :: DesugarState -> Result ()
+setState = put
+
+getNextId :: Result Int
+getNextId = do
+  id'    <- (+ 1) . state_uniqueNameCounter <$> getState
+  constr <- state_constructors <$> getState
+  setState (DesugarState id' constr) $> id'
+
+setConstructors :: C.Constructors -> Result ()
+setConstructors constr = do
+  uniques <- state_uniqueNameCounter <$> getState
+  setState (DesugarState uniques constr)
+
+bindConstructor :: C.Name -> C.Ty -> Result ()
+bindConstructor n ty = do
+  constrs <- state_constructors <$> getState
+  setConstructors $ Map.insert n ty constrs
+
+
+type Result a = StateT DesugarState (Either String) a
 
 desugar' :: S.AST -> Result C.CoreExpr
 desugar' (S.Expr e) = desugarExpr e
@@ -118,7 +151,8 @@ desugarDecl' (S.Module _ body) = concat <$> traverse go_body body
     go_body (S.Decl d) = desugarDecl' d
     go_body (S.Expr e) = return [e]
 
-desugarDecl' (S.Record constr fields) = (constructor :) <$> accessors
+desugarDecl' (S.Record constr fields) =
+  bindConstructor constr constrTy >> (constructor :) <$> accessors
   where
     constructor = S.Let constr fields (S.Tuple (S.Identifier <$> fields))
     accessors   = traverse generateAccessor fields
@@ -127,13 +161,12 @@ desugarDecl' (S.Record constr fields) = (constructor :) <$> accessors
       return
         $ S.Let name [arg] (S.Identifier arg `S.Call` [fieldExtractor name])
     fieldExtractor = S.Lambda fields . S.Identifier
+    constrTy       = foldr (C.:~>) (C.NominalTy constr) (C.AnyTy <$ fields)
 
 -- Helper functions
 
 nextId :: Result C.Name
-nextId = do
-  nextId' <- (+ 1) <$> get
-  put nextId' $> "_$" ++ show nextId'
+nextId = ("_$" ++) . show <$> getNextId
 
 desugarBlockExprs :: [S.Expr] -> Result C.CoreExpr
 desugarBlockExprs []                          = fail "Unexpected empty block"

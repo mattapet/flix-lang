@@ -253,6 +253,19 @@ spec = do
       let out = LitV (Int 5)
       show <$> run in' `shouldBe` Right (show out)
 
+    it "preserved constructor information of the values" $ do
+      let
+        in'
+          = " module TestModule           \n\
+          \   record (:) head tail        \n\
+          \                               \n\
+          \   let xs = (1 : 5 : ())       \n\
+          \                               \n\ 
+          \   tail xs                     \n\
+          \"
+      let out = LitV (Int 5)
+      show <$> run in' `shouldBe` Right (show out)
+
 run :: String -> Either String Value
-run = parse >=> rename >=> desugar >=> (fst <$>) . eval builtins
+run = parse >=> rename >=> (fst <$>) . desugar >=> (fst <$>) . eval builtins
 
