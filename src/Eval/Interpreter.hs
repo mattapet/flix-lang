@@ -17,6 +17,9 @@ import           Data.Functor                   ( ($>) )
 import qualified Data.Map                      as Map
 import           Eval.Core
 
+eval :: Environment -> CoreExpr -> Either String (Value, Environment)
+eval env = flip runStateT env . runResult . eval'
+
 newtype Result a = Result { runResult :: StateT Environment (Either String) a }
   deriving (Monad, Applicative, Functor)
 
@@ -35,8 +38,7 @@ getEnv = Result get
 setEnv :: Environment -> Result ()
 setEnv = Result . put
 
-eval :: Environment -> CoreExpr -> Either String (Value, Environment)
-eval env = flip runStateT env . runResult . eval'
+-- Evaluation
 
 eval' :: CoreExpr -> Result Value
 eval' (Lit x       ) = return $ LitV x

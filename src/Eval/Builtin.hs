@@ -7,19 +7,19 @@ import           Eval.Core
 
 builtins :: Environment
 builtins = fromList
-  [ makeIntBuiltin "+" (+)
-  , makeIntBuiltin "-" (-)
-  , makeIntBuiltin "*" (*)
-  , makeIntBuiltin "/" div
-  , makeIntBuiltin "%" mod
+  [ makeIntBuiltin "+" (\x y -> Int $ x + y)
+  , makeIntBuiltin "-" (\x y -> Int $ x - y)
+  , makeIntBuiltin "*" (\x y -> Int $ x * y)
+  , makeIntBuiltin "/" (\x y -> Int $ x `div` y)
+  , makeIntBuiltin "%" (\x y -> Int $ x `mod` y)
   , makeBoolBuiltin "&&" (&&)
   , makeBoolBuiltin "||" (||)
   , equals
   , nequals
-  , makeCompareBuiltin "<"  (<)
-  , makeCompareBuiltin ">"  (>)
-  , makeCompareBuiltin "<=" (<=)
-  , makeCompareBuiltin ">=" (>=)
+  , makeIntBuiltin "<"  (\x y -> Bool $ x < y)
+  , makeIntBuiltin ">"  (\x y -> Bool $ x > y)
+  , makeIntBuiltin "<=" (\x y -> Bool $ x <= y)
+  , makeIntBuiltin ">=" (\x y -> Bool $ x >= y)
   ]
 
 equals :: (Name, Value)
@@ -28,25 +28,10 @@ equals = makeBuiltinBinop "==" (\l r -> Right $ Bool $ l == r)
 nequals :: (Name, Value)
 nequals = makeBuiltinBinop "!=" (\l r -> Right $ Bool $ l /= r)
 
-makeIntBuiltin :: Name -> (Integer -> Integer -> Integer) -> (Name, Value)
+makeIntBuiltin :: Name -> (Integer -> Integer -> Literal) -> (Name, Value)
 makeIntBuiltin name op = makeBuiltinBinop name apply
   where
-    apply (Int x) (Int y) = return $ Int $ x `op` y
-    apply (Int _) y       = throwError y
-    apply x       _       = throwError x
-
-    throwError arg =
-      Left
-        $  "Function '"
-        ++ name
-        ++ "' expects integer values but '"
-        ++ show arg
-        ++ "' was provided"
-
-makeCompareBuiltin :: Name -> (Integer -> Integer -> Bool) -> (Name, Value)
-makeCompareBuiltin name op = makeBuiltinBinop name apply
-  where
-    apply (Int x) (Int y) = return $ Bool $ x `op` y
+    apply (Int x) (Int y) = return $ x `op` y
     apply (Int _) y       = throwError y
     apply x       _       = throwError x
 

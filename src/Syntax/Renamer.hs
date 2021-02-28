@@ -22,6 +22,9 @@ import           Data.Map                       ( (!?)
 import           Data.Maybe                     ( fromMaybe )
 import           Syntax.Core
 
+rename :: AST -> Either String AST
+rename = (fst <$>) . flip runStateT makeEmptyState . rename'
+
 
 type Result a = StateT RenamerState (Either String) a
 
@@ -74,9 +77,6 @@ bindNameSub name sub = do
   setSubstitutions $ (name, sub) : subs
 
 -- Renaming
-
-rename :: AST -> Either String AST
-rename = (fst <$>) . flip runStateT makeEmptyState . rename'
 
 rename' :: AST -> Result AST
 rename' (Expr e) = Expr <$> renameExpr e
