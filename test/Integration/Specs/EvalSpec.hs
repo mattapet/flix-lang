@@ -177,12 +177,12 @@ spec = do
             \     equals () _  = false            \n\
             \     equals _  () = false            \n\
             \     equals (x, xs) (y, ys) =        \n\
-            \       if x == y then equals xs ys   \n\
+            \       if x == y then xs `equals` ys \n\
             \                 else false          \n\
             \                                     \n\
             \ let xs = (1, (2, (3, ())))          \n\
             \ let ys = (1, (2, (3, ())))          \n\
-            \ equals xs ys                        "
+            \ xs `equals` ys                        "
       let out = LitV (Bool True)
       show <$> run in' `shouldBe` Right (show out)
 
@@ -194,12 +194,12 @@ spec = do
             \     equals () _  = false            \n\
             \     equals _  () = false            \n\
             \     equals (x, xs)  (y, ys) =       \n\
-            \       if x == y then equals xs ys   \n\
+            \       if x == y then xs `equals` ys \n\
             \                 else false          \n\
             \                                     \n\
             \ let xs = (1, (5, (3, ())))          \n\
             \ let ys = (1, (2, (3, ())))          \n\
-            \ equals xs ys                        "
+            \ xs `equals` ys                        "
       let out = LitV (Bool False)
       show <$> run in' `shouldBe` Right (show out)
 
@@ -211,12 +211,12 @@ spec = do
             \     equals () _  = false            \n\
             \     equals _  () = false            \n\
             \     equals (x, xs)  (y, ys) =       \n\
-            \       if x == y then equals xs ys   \n\
+            \       if x == y then xs `equals` ys \n\
             \                 else false          \n\
             \                                     \n\
             \ let xs = (1, (2, ()))               \n\
             \ let ys = (1, (2, (3, ())))          \n\
-            \ equals xs ys                        "
+            \ xs `equals` ys                        "
       let out = LitV (Bool False)
       show <$> run in' `shouldBe` Right (show out)
 

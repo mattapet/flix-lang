@@ -139,7 +139,10 @@ factor = foldl1 (<|>) factors
 -- Terms
 
 binop :: Parsec String u Expr
-binop = factor `chainl1` op where op = BinOp <$> operator
+binop = factor `chainl1` op
+  where
+    op = BinOp <$> (operator <|> escaped identifier)
+    escaped p = spaces *> char '`' *> p <* char '`' <* spaces
 
 term :: Parsec String u Expr
 term = foldl1 (<|>) terms where terms = try <$> [binop, factor]

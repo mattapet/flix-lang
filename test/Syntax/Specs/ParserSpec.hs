@@ -33,6 +33,7 @@ spec = do
                     (BinOp "+" (Identifier "x") (Identifier "y"))
                     (Identifier "z")
             )
+          , ("xs `lEq` ys", BinOp "lEq" (Identifier "xs") (Identifier "ys"))
           , ("(+)"        , OperatorCapture "+")
           , ("let x = 2"  , LetMatch "x" [([], NumberLiteral 2)])
           , ("let f a = a", LetMatch "f" [([Identifier "a"], Identifier "a")])
