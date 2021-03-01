@@ -7,6 +7,7 @@ import           Control.Lens
 import           Control.Monad.ExceptT
 import           Control.Monad.StateT
 import qualified Data.Map                      as Map
+import           Data.Maybe                     ( fromMaybe )
 import           Flix.Capabilities
 import           Flix.FlixState
 
@@ -61,11 +62,26 @@ instance (Monad m) => ModuleRegistry (FlixMonadT m) where
 instance (Monad m, ModuleRegistry m) => SymbolAliasRegistry (FlixMonadT m) where
   lookupSymbolAlias name = liftA2 format getCurrentModule getSymbolId
     where
-      getSymbolId = (Map.!? name) . view state_substitutions <$> getState
+      getSymbolId = lookup name . view state_substitutions <$> getState
       format _        Nothing    = name -- skip formatting altogether when the symbol is not registered
       format Nothing  (Just id') = name ++ "_$" ++ show id'
       format (Just m) (Just id') = m ++ "." ++ name ++ "_$" ++ show id'
 
   registerSymbol name = do
-    updateState $ over state_substitutions (Map.insertWith (+) name 1)
-    lookupSymbolAlias name
+    nextId <- generateNewId <$> getState
+    m      <- getCurrentModule
+    let newSymbolName = formatName m nextId
+    updateState $ over state_symbolCounter (Map.insert name nextId)
+    updateState $ over state_substitutions ((name, newSymbolName) :)
+    return newSymbolName
+    where
+      generateNewId = fromMaybe 1 . (Map.!? name) . view state_symbolCounter
+      formatName (Just m) id' = m ++ "." ++ name ++ "_$" ++ show id'
+      formatName Nothing  id' = name ++ "_$" ++ show id'
+
+  pushFrame f = do
+    subs   <- view state_substitutions <$> getState
+    result <- f
+    getState >>= setState . set state_substitutions subs
+    return result
+

@@ -16,3 +16,4 @@ class ModuleRegistry m where
 class (ModuleRegistry m) => SymbolAliasRegistry m where
   registerSymbol :: String -> m String
   lookupSymbolAlias :: String -> m String
+  pushFrame :: m a -> m a

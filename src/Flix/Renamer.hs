@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module Flix.Renamer
   ( rename
@@ -9,83 +10,24 @@ import           Control.Applicative            ( liftA2
                                                 , liftA3
                                                 )
 import           Control.Monad                  ( (>=>) )
-import           Control.Monad.StateT
-import           Data.Functor                   ( ($>) )
 import           Data.List                      ( intercalate
                                                 , intersect
                                                 )
-import           Data.Map                       ( (!?)
-                                                , Map
-                                                , empty
-                                                , insert
-                                                )
-import           Data.Maybe                     ( fromMaybe )
+import           Flix.Capabilities
 import           Flix.Syntax
 
-rename :: AST -> Either String AST
-rename = (fst <$>) . flip runStateT makeEmptyState . rename'
-
-
-type Result a = StateT RenamerState (Either String) a
-
--- Renaming State
-
-data RenamerState = RenamerState
-  { state_substitutions     :: [(Name, Name)]
-  , state_uniqueNameCounter :: Map String Int
-  , state_moduleName        :: Maybe Name
-  }
-
-makeEmptyState :: RenamerState
-makeEmptyState = RenamerState [] empty Nothing
-getSubstitutions :: Result [(Name, Name)]
-getSubstitutions = state_substitutions <$> get
-
-setSubstitutions :: [(Name, Name)] -> Result ()
-setSubstitutions subs = do
-  counts <- getNameCounter
-  name   <- getModuleName
-  put $ RenamerState subs counts name
-
-getNameCounter :: Result (Map String Int)
-getNameCounter = state_uniqueNameCounter <$> get
-
-setNameCounter :: Map String Int -> Result ()
-setNameCounter counts = do
-  subs <- getSubstitutions
-  name <- getModuleName
-  put $ RenamerState subs counts name
-
-getModuleName :: Result (Maybe Name)
-getModuleName = state_moduleName <$> get
-
-setModuleName :: Name -> Result ()
-setModuleName name = do
-  subs   <- getSubstitutions
-  counts <- getNameCounter
-  put $ RenamerState subs counts (Just name)
-
-incrementCountForName :: Name -> Result Int
-incrementCountForName x = do
-  counts <- getNameCounter
-  let nextId = maybe 1 (+ 1) $ counts !? x
-  setNameCounter $ insert x nextId counts
-  return nextId
-
-bindNameSub :: Name -> Name -> Result ()
-bindNameSub name sub = do
-  subs <- getSubstitutions
-  setSubstitutions $ (name, sub) : subs
+type Renaming m
+  = (Monad m, MonadFail m, ModuleRegistry m, SymbolAliasRegistry m)
 
 -- Renaming
 
-rename' :: AST -> Result AST
-rename' (Expr e) = Expr <$> renameExpr e
-rename' (Decl d) = Decl <$> renameDecl d
+rename :: Renaming m => AST -> m AST
+rename (Expr e) = Expr <$> renameExpr e
+rename (Decl d) = Decl <$> renameDecl d
 
 -- Expressions
 
-renameExpr :: Expr -> Result Expr
+renameExpr :: Renaming m => Expr -> m Expr
 renameExpr Underscore               = return Underscore
 renameExpr val@BoolLiteral{}        = return val
 renameExpr val@NumberLiteral{}      = return val
@@ -120,11 +62,10 @@ renameExpr (Block exprs) = pushFrame $ Block <$> traverse renameExpr exprs
 renameExpr (Match value caseExprs) =
   liftA2 Match (renameExpr value) (traverse renameCaseExpr caseExprs)
 
-renameName :: Name -> Result Name
-renameName x = lookupVar <$> getSubstitutions
-  where lookupVar subs = fromMaybe x $ lookup x subs
+renameName :: Renaming m => Name -> m Name
+renameName = lookupSymbolAlias
 
-renameCaseLet :: ([Expr], Expr) -> Result ([Expr], Expr)
+renameCaseLet :: Renaming m => ([Expr], Expr) -> m ([Expr], Expr)
 renameCaseLet (args, body) = pushFrame $ do
   _ <- introduceVariables $ foldMap collect_vars args
   liftA2 (,) (traverse renameExpr args) (renameExpr body)
@@ -133,7 +74,7 @@ renameCaseLet (args, body) = pushFrame $ do
     collect_vars (Tuple      t) = foldMap collect_vars t
     collect_vars _              = []
 
-renameCaseExpr :: CaseExpr -> Result CaseExpr
+renameCaseExpr :: Renaming m => CaseExpr -> m CaseExpr
 renameCaseExpr (pattern, value) = pushFrame $ do
   _ <- introduceVariables $ collect_vars pattern
   liftA2 (,) (renameExpr pattern) (renameExpr value)
@@ -144,40 +85,23 @@ renameCaseExpr (pattern, value) = pushFrame $ do
 
 -- Declarations
 
-renameDecl :: Decl -> Result Decl
+renameDecl :: Renaming m => Decl -> m Decl
 renameDecl (Module name contents) = do
-  getModuleName >>= checkForModuleRedeclaration
-  setModuleName name
-  Module name <$> traverse rename' contents
-  where
-    checkForModuleRedeclaration Nothing = return ()
-    checkForModuleRedeclaration (Just name') =
-      fail $ "Unexpected module re-declaration of module '" ++ name' ++ "'"
+  registerModule name
+  Module name <$> traverse rename contents
 
 renameDecl (Record name fields) =
   liftA2 Record (introduceVariable name) (introduceVariables fields)
 
 -- Helper functions
 
-pushFrame :: Result a -> Result a
-pushFrame f = do
-  pre    <- getSubstitutions
-  result <- f
-  setSubstitutions pre $> result
-
-introduceVariables :: [Name] -> Result [Name]
+introduceVariables :: Renaming m => [Name] -> m [Name]
 introduceVariables = uniq >=> traverse introduceVariable
 
-introduceVariable :: Name -> Result Name
-introduceVariable x = do
-  nextId  <- incrementCountForName x
-  module' <- getModuleName
-  let pref = maybe "" (++ ".") module'
-  let x'   = pref ++ x ++ "_$" ++ show nextId
-  bindNameSub x x'
-  return x'
+introduceVariable :: Renaming m => Name -> m Name
+introduceVariable = registerSymbol
 
-uniq :: [Name] -> Result [Name]
+uniq :: Renaming m => [Name] -> m [Name]
 uniq names = case conflictingNames names [] of
   []        -> return names
   conflicts -> fail $ formatConflicts conflicts
