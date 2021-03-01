@@ -2,6 +2,8 @@ module Flix.Specs.RenamerSpec
   ( spec
   ) where
 
+import           Flix.FlixMonad                 ( runFlixMonad )
+import           Flix.FlixState                 ( makeEmptyState )
 import           Flix.Renamer                   ( rename )
 import           Flix.Syntax
 import           Test.Hspec
@@ -61,7 +63,7 @@ spec = do
         ]
     forM_ testSuite $ \(in', out) ->
       it (printf "should rename %s to %s" (show in') (show out)) $ do
-        rename (Expr in') `shouldBe` Right (Expr out)
+        runRenamer (Expr in') `shouldBe` Right (Expr out)
 
   describe "Block renaming" $ do
     let
@@ -93,13 +95,13 @@ spec = do
         ]
     forM_ testSuite $ \(in', out) ->
       it (printf "should rename %s to %s" (show in') (show out)) $ do
-        rename (Expr in') `shouldBe` Right (Expr out)
+        runRenamer (Expr in') `shouldBe` Right (Expr out)
 
   describe "Lambda renaming" $ do
     it "renames arguments" $ do
       let in' = Lambda ["x"] (Identifier "x")
       let out = Lambda ["x_$1"] (Identifier "x_$1")
-      rename (Expr in') `shouldBe` Right (Expr out)
+      runRenamer (Expr in') `shouldBe` Right (Expr out)
 
   describe "Match expressions" $ do
     it "renames branch variables" $ do
@@ -110,7 +112,7 @@ spec = do
             "f_$1"
             ["x_$1"]
             (Match (Identifier "x_$1") [(Underscore, Identifier "x_$1")])
-      rename (Expr in') `shouldBe` Right (Expr out)
+      runRenamer (Expr in') `shouldBe` Right (Expr out)
     it "introduce new names on variable capture" $ do
       let
         in' = Let "f"
@@ -120,7 +122,7 @@ spec = do
             "f_$1"
             ["x_$1"]
             (Match (Identifier "x_$1") [(Identifier "y_$1", Identifier "y_$1")])
-      rename (Expr in') `shouldBe` Right (Expr out)
+      runRenamer (Expr in') `shouldBe` Right (Expr out)
     it "introduce new names on variable in tuple pattern capture" $ do
       let in' = Let
             "f"
@@ -138,7 +140,7 @@ spec = do
                 )
               ]
             )
-      rename (Expr in') `shouldBe` Right (Expr out)
+      runRenamer (Expr in') `shouldBe` Right (Expr out)
 
   describe "Operator let renaming" $ do
     it "renamed defined let operator" $ do
@@ -158,7 +160,7 @@ spec = do
               )
             , BinOp "===_$1" (Identifier "x") (Identifier "y")
             ]
-      rename (Expr input) `shouldBe` Right (Expr output)
+      runRenamer (Expr input) `shouldBe` Right (Expr output)
 
 
   describe "Pattern matching let bindings" $ do
@@ -178,7 +180,7 @@ spec = do
             )
           ]
     forM_ testSuite $ \(in', out) -> it (printf "renames %s" (show in')) $ do
-      rename (Expr in') `shouldBe` Right (Expr out)
+      runRenamer (Expr in') `shouldBe` Right (Expr out)
 
   describe "Conflicting definitions detections" $ do
     let testSuite =
@@ -191,7 +193,7 @@ spec = do
           ]
     forM_ testSuite $ \(in', out) ->
       it (printf "rename %s to %s" (show in') (show out)) $ do
-        rename (Expr in') `shouldBe` out
+        runRenamer (Expr in') `shouldBe` out
 
   describe "Declarations" $ do
     let
@@ -220,10 +222,13 @@ spec = do
         ]
     forM_ testSuite $ \(in', out) ->
       it (printf "renamed %s to %s" (show in') (show out)) $ do
-        rename (Decl in') `shouldBe` Right (Decl out)
+        runRenamer (Decl in') `shouldBe` Right (Decl out)
 
     it "fails upon module re-declaration" $ do
       let input = Decl $ Module "M1" [Decl $ Module "M2" []]
-      rename input
+      runRenamer input
         `shouldBe` Left "Unexpected module re-declaration of module 'M1'"
 
+
+runRenamer :: AST -> Either String AST
+runRenamer input = fst <$> runFlixMonad (rename input) makeEmptyState

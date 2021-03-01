@@ -5,10 +5,9 @@ module Flix.Specs.DesugarSpec
 import           Core                    hiding ( Expr )
 import qualified Data.Map                      as Map
 import           Data.Types
-import           Flix.Desugar                   ( DesugarState(..)
-                                                , desugar
-                                                , makeEmptyState
-                                                )
+import           Flix.Desugar                   ( desugar )
+import           Flix.FlixMonad
+import           Flix.FlixState
 import           Flix.Syntax
 import           Test.Hspec
 import           Test.Util
@@ -30,7 +29,7 @@ spec = do
           ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        (fst <$> desugar makeEmptyState (Expr in')) `shouldBe` Right out
+        runDesugar (Expr in') `shouldBe` Right out
 
   describe "Calls" $ do
     let testSuite =
@@ -48,7 +47,7 @@ spec = do
           ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        (fst <$> desugar makeEmptyState (Expr in')) `shouldBe` Right out
+        runDesugar (Expr in') `shouldBe` Right out
 
   describe "Basic Bindings" $ do
     let testSuite =
@@ -73,7 +72,7 @@ spec = do
           ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        (fst <$> desugar makeEmptyState (Expr in')) `shouldBe` Right out
+        runDesugar (Expr in') `shouldBe` Right out
 
   describe "Bindings in Blocks" $ do
     let
@@ -96,7 +95,7 @@ spec = do
         ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        (fst <$> desugar makeEmptyState (Expr in')) `shouldBe` Right out
+        runDesugar (Expr in') `shouldBe` Right out
 
   describe "Invalid blocks" $ do
     let testSuite =
@@ -107,7 +106,7 @@ spec = do
           ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        (fst <$> desugar makeEmptyState (Expr in')) `shouldBe` Left out
+        runDesugar (Expr in') `shouldBe` Left out
 
 
   describe "Case expressions" $ do
@@ -140,7 +139,7 @@ spec = do
         ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        (fst <$> desugar makeEmptyState (Expr in')) `shouldBe` Right out
+        runDesugar (Expr in') `shouldBe` Right out
 
   describe "pattern matching let bindings" $ do
     let testSuites =
@@ -168,7 +167,7 @@ spec = do
           ]
     forM_ testSuites $ \(in', out) ->
       it (printf "translated %s" (show in')) $ do
-        (fst <$> desugar makeEmptyState (Expr in')) `shouldBe` Right out
+        runDesugar (Expr in') `shouldBe` Right out
 
   describe "Constructor pattern matching" $ do
     it "creates a constructor pattern match" $ do
@@ -185,7 +184,9 @@ spec = do
               )
             ]
       let tys = Map.fromList [(":", AnyTy :~> AnyTy :~> NominalTy ":")]
-      desugar (DesugarState 0 tys) input `shouldBe` Right (output, tys)
+      let Right (o', FlixState _ _ _ tys' _) =
+            runFlixMonad (desugar input) (FlixState [] mempty 0 tys Nothing)
+      (o', tys') `shouldBe` (output, tys)
 
     it "errors on unknown constructor" $ do
       let input = Expr $ Match
@@ -200,7 +201,7 @@ spec = do
               , Lit $ Bool True
               )
             ]
-      desugar makeEmptyState input `shouldBe` Left "Constructor ':' not found"
+      runDesugar input `shouldBe` Left "Constructor ':' not found"
 
 
 
@@ -246,4 +247,9 @@ spec = do
         ]
     forM_ tesSuite $ \(in', out, ty) ->
       it (printf "translates declaration %s" (show in')) $ do
-        desugar makeEmptyState (Decl in') `shouldBe` Right (out, ty)
+        let Right (o', FlixState _ _ _ tys' _) =
+              runFlixMonad (desugar (Decl in')) makeEmptyState
+        (o', tys') `shouldBe` (out, ty)
+
+runDesugar :: AST -> Either String CoreExpr
+runDesugar input = fst <$> runFlixMonad (desugar input) makeEmptyState

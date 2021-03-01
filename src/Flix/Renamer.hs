@@ -16,8 +16,7 @@ import           Data.List                      ( intercalate
 import           Flix.Capabilities
 import           Flix.Syntax
 
-type Renaming m
-  = (Monad m, MonadFail m, ModuleRegistry m, SymbolAliasRegistry m)
+type Renaming m = (MonadFail m, ModuleRegistry m, SymbolAliasRegistry m)
 
 -- Renaming
 
@@ -96,19 +95,19 @@ renameDecl (Record name fields) =
 -- Helper functions
 
 introduceVariables :: Renaming m => [Name] -> m [Name]
-introduceVariables = uniq >=> traverse introduceVariable
+introduceVariables = uniq >=> traverse registerSymbol
 
 introduceVariable :: Renaming m => Name -> m Name
 introduceVariable = registerSymbol
 
 uniq :: Renaming m => [Name] -> m [Name]
-uniq names = case conflictingNames names [] of
+uniq names = case collect_conflictingNames names [] of
   []        -> return names
   conflicts -> fail $ formatConflicts conflicts
   where
-    conflictingNames [] acc = acc
-    conflictingNames (x : xs) acc =
-      conflictingNames xs (acc ++ [x] `intersect` xs)
+    collect_conflictingNames [] acc = acc
+    collect_conflictingNames (x : xs) acc =
+      collect_conflictingNames xs (acc ++ [x] `intersect` xs)
 
 formatConflicts :: [Name] -> String
 formatConflicts = wrapInMessage . sep . (quote <$>)

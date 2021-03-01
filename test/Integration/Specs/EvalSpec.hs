@@ -7,11 +7,8 @@ import           Core.Builtin                   ( builtins )
 import           Core.Expr
 import           Core.Interpreter               ( eval )
 import           Data.Types
-import           Flix.Desugar                   ( desugar
-                                                , makeEmptyState
-                                                )
-import           Flix.Parser                    ( parse )
-import           Flix.Renamer                   ( rename )
+import           Flix
+import           Flix.FlixState
 
 import           Test.Hspec
 
@@ -339,8 +336,8 @@ spec = do
       show <$> run in' `shouldBe` Right (show out)
 
 run :: String -> Either String Value
-run = parse >=> rename >=> desugar makeEmptyState >=> (fst <$>) . unpack
+run = runCompiler >=> (fst <$>) . eval'
   where
-    unpack (core, constrs) = eval (Environment b constrs) core
+    eval' (core, FlixState _ _ _ constrs _) = eval (Environment b constrs) core
     (Environment b _) = builtins
 

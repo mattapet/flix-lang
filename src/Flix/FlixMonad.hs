@@ -2,7 +2,6 @@
 
 module Flix.FlixMonad where
 
-import           Control.Applicative            ( liftA2 )
 import           Control.Lens
 import           Control.Monad.ExceptT
 import           Control.Monad.StateT
@@ -45,7 +44,7 @@ instance (Monad m) => UniqueNameGeneration (FlixMonadT m) where
     format . view state_uniqueNameCounter <$> getState
     where format = ("_$" ++) . show
 
-instance (Monad m, MonadFail m) => ConstructorRegistry (FlixMonadT m) where
+instance (Monad m) => ConstructorRegistry (FlixMonadT m) where
   bindConstructor con ty = updateState insertCon
     where insertCon = over state_constructors (Map.insert con ty)
 
@@ -56,32 +55,39 @@ instance (Monad m, MonadFail m) => ConstructorRegistry (FlixMonadT m) where
       unpack Nothing  = fail $ "Constructor '" ++ name ++ "' not found"
 
 instance (Monad m) => ModuleRegistry (FlixMonadT m) where
-  registerModule m = updateState $ over state_moduleName (const $ Just m)
+  registerModule m = getState >>= unpack . view state_moduleName
+    where
+      unpack (Just m') =
+        fail $ "Unexpected module re-declaration of module '" ++ m' ++ "'"
+      unpack Nothing = updateState $ over state_moduleName (const $ Just m)
+
   getCurrentModule = view state_moduleName <$> getState
 
-instance (Monad m, ModuleRegistry m) => SymbolAliasRegistry (FlixMonadT m) where
-  lookupSymbolAlias name = liftA2 format getCurrentModule getSymbolId
-    where
-      getSymbolId = lookup name . view state_substitutions <$> getState
-      format _        Nothing    = name -- skip formatting altogether when the symbol is not registered
-      format Nothing  (Just id') = name ++ "_$" ++ show id'
-      format (Just m) (Just id') = m ++ "." ++ name ++ "_$" ++ show id'
+instance (Monad m) => SymbolAliasRegistry (FlixMonadT m) where
+  lookupSymbolAlias name = lookup' . view state_substitutions <$> getState
+    where lookup' = fromMaybe name . lookup name
 
   registerSymbol name = do
     nextId <- generateNewId <$> getState
     m      <- getCurrentModule
     let newSymbolName = formatName m nextId
-    updateState $ over state_symbolCounter (Map.insert name nextId)
-    updateState $ over state_substitutions ((name, newSymbolName) :)
+    updateCounter nextId
+    updateSubs newSymbolName
     return newSymbolName
     where
-      generateNewId = fromMaybe 1 . (Map.!? name) . view state_symbolCounter
+      generateNewId = maybe 1 (+ 1) . (Map.!? name) . view state_symbolCounter
       formatName (Just m) id' = m ++ "." ++ name ++ "_$" ++ show id'
       formatName Nothing  id' = name ++ "_$" ++ show id'
+      updateCounter nextId =
+        updateState $ over state_symbolCounter (Map.insert name nextId)
+      updateSubs sub = updateState $ over state_substitutions ((name, sub) :)
 
   pushFrame f = do
-    subs   <- view state_substitutions <$> getState
+    subs   <- getCurrentSubs
     result <- f
-    getState >>= setState . set state_substitutions subs
+    replace subs
     return result
+    where
+      getCurrentSubs = view state_substitutions <$> getState
+      replace subs = getState >>= setState . set state_substitutions subs
 

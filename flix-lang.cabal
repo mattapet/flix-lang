@@ -34,7 +34,9 @@ library
       Core.Expr
       Core.Interpreter
       Data.Types
+      Flix
       Flix.Capabilities
+      Flix.Compiler
       Flix.Desugar
       Flix.FlixMonad
       Flix.FlixState
