@@ -135,16 +135,18 @@ spec = do
         in'
           = " module TestModule                   \n\
             \ record (:) head tail                \n\
+            \ record Nil                          \n\
+            \                                     \n\
             \ let head x = (x)                    \n\
             \ let tail x = match x {              \n\
             \   case () => ()                     \n\
-            \   case (_:tail) => tail            \n\
+            \   case (_:tail) => tail             \n\
             \ }                                   \n\
             \ let length xs = match xs {          \n\
             \    case () => 0                     \n\
             \    case (_:tail) => 1 + length tail \n\
             \ }                                   \n\
-            \ length (1 : 2 : 3 : 4 : 5 : ())"
+            \ length [1, 2, 3, 4, 5]"
       let out = LitV (Int 5)
       show <$> run in' `shouldBe` Right (show out)
 
@@ -330,7 +332,7 @@ spec = do
           \       foldr f b (x : xs) =     \n\
           \             f (foldr f b xs) x \n\
           \                                \n\
-          \   foldr (+) 0 (1 : 2 : 3 : Nil)\n\
+          \   foldr (+) 0 [1, 2, 3]        \n\
           \"
       let out = LitV $ Int 6
       show <$> run in' `shouldBe` Right (show out)

@@ -58,7 +58,7 @@ identifierChar :: Parsec String u Char
 identifierChar = alphaNum <|> oneOf "'_"
 
 operatorChar :: Parsec String u Char
-operatorChar = oneOf "+-*/=<>|&:."
+operatorChar = oneOf "+-*/=<>|&:.$%!"
 
 identifier :: Parsec String u String
 identifier = spaces *> identifier' <* spaces
@@ -96,12 +96,19 @@ identifierOrConstructor = wrap <$> identifier
     wrap id' | isUpper $ head id' = Constructor id'
              | otherwise          = Identifier id'
 
+list :: Parsec String u Expr
+list = brackets body
+  where
+    brackets p = spaces *> char '[' *> p <* char ']' <* spaces
+    body = transform <$> expr `sepBy` char ','
+    transform xs = foldr (BinOp ":") (Identifier "Nil") xs
+
 lambda :: Parsec String u Expr
 lambda = spaces *> braces body <* spaces
   where
     braces p = char '{' *> p <* char '}'
     body = liftA2 Lambda args expr
-    args = anySpace *> many1 identifier <* spaces <* string "=>" <* spaces
+    args = anySpaces *> many1 identifier <* spaces <* string "=>" <* spaces
 
 block :: Parsec String u Expr
 block = Block <$> (spaces *> braces body <* spaces)
@@ -127,6 +134,7 @@ atom = foldl1 (<|>) atoms
             , BoolLiteral <$> boolean
             , NumberLiteral <$> number
             , identifierOrConstructor
+            , list
             , lambda
             , block
             , parens
