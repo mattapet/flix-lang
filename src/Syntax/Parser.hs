@@ -57,7 +57,7 @@ identifierChar :: Parsec String u Char
 identifierChar = alphaNum <|> oneOf "'_"
 
 operatorChar :: Parsec String u Char
-operatorChar = oneOf "+-*/=<>|&:"
+operatorChar = oneOf "+-*/=<>|&:."
 
 identifier :: Parsec String u String
 identifier = spaces *> identifier' <* spaces

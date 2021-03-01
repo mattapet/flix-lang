@@ -15,6 +15,7 @@ import           Control.Monad.Extra            ( bind2 )
 import           Control.Monad.StateT
 import           Data.Functor                   ( ($>) )
 import qualified Data.Map                      as Map
+import           Data.Maybe                     ( fromMaybe )
 import           Eval.Core
 
 eval :: Environment -> CoreExpr -> Either String (Value, Environment)
@@ -42,18 +43,19 @@ getScope :: Result Scope
 getScope = env_scope <$> getEnv
 
 setScope :: Scope -> Result ()
-setScope s = do
-  Environment _ c <- getEnv
-  setEnv $ Environment s c
+setScope s = getEnv >>= setEnv . Environment s . env_constr
+
+getConstructors :: Result Constructors
+getConstructors = env_constr <$> getEnv
 
 -- Evaluation
 
 eval' :: CoreExpr -> Result Value
 eval' (Lit x       ) = return $ LitV x
-eval' (Var x       ) = lookupVariable x
+eval' (Var x       ) = liftA2 bindType (lookupType x) (lookupVariable x)
 eval' (Lam arg body) = do
   scope <- getScope
-  return $ LambdaV scope arg body
+  return $ LambdaV AnyTy scope arg body
 
 eval' (App  callee        arg    ) = bind2 apply (eval' callee) (eval' arg)
 
@@ -69,11 +71,15 @@ eval' (Case value patterns) = pushFrame $ do
 -- Lambda applications
 
 apply :: Value -> Value -> Result Value
-apply (BuiltinV _ fn         ) value = Result $ liftStateM $ fn value
-apply (LambdaV scope arg body) value = pushFrame $ switchContext scope $ do
+apply (BuiltinV _ fn            ) value = Result $ liftStateM $ fn value
+apply (LambdaV ty scope arg body) value = pushFrame $ switchContext scope $ do
   bindValue arg value
-  eval' body
+  applyType ty <$> eval' body
 apply expr _ = fail $ "Expression '" ++ show expr ++ "' is not callable"
+
+applyType :: Ty -> Value -> Value
+applyType (_ :~> ty) (LambdaV _ s n c) = LambdaV ty s n c
+applyType _          v                 = v
 
 -- Pattern matching
 
@@ -125,8 +131,15 @@ lookupVariable x = getScope >>= unpack . (Map.!? x)
     unpack (Just v) = return v
     unpack Nothing  = fail $ "Unbound variable '" ++ x ++ "'"
 
+lookupType :: Name -> Result Ty
+lookupType x = fromMaybe AnyTy . (Map.!? x) <$> getConstructors
+
 bindValue :: Name -> Value -> Result ()
 bindValue name value = getScope >>= setScope . Map.insert name value
+
+bindType :: Ty -> Value -> Value
+bindType ty (LambdaV AnyTy s n c) = LambdaV ty s n c
+bindType _  v                     = v
 
 pushFrame :: Result a -> Result a
 pushFrame f = do

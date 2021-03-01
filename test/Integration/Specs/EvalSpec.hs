@@ -258,14 +258,19 @@ spec = do
         in'
           = " module TestModule           \n\
           \   record (:) head tail        \n\
+          \   record Nil                  \n\
           \                               \n\
-          \   let xs = (1 : 5 : ())       \n\
+          \   let xs = 1 : 5 : Nil        \n\
           \                               \n\ 
-          \   tail xs                     \n\
+          \   tail (tail xs)              \n\
           \"
-      let out = LitV (Int 5)
+      let out =
+            LambdaV (NominalTy "TestModule.Nil_$1") mempty "_$4" (Var "_$4")
       show <$> run in' `shouldBe` Right (show out)
 
 run :: String -> Either String Value
-run = parse >=> rename >=> (fst <$>) . desugar >=> (fst <$>) . eval builtins
+run = parse >=> rename >=> desugar >=> (fst <$>) . unpack
+  where
+    unpack (core, constrs) = eval (Environment b constrs) core
+    (Environment b _) = builtins
 

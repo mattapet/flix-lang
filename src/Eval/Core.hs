@@ -47,12 +47,13 @@ type Builtin = Value -> Either String Value
 
 data Value =
     LitV Literal
-  | LambdaV Scope Name CoreExpr
+  | LambdaV Ty Scope Name CoreExpr
   | BuiltinV Name Builtin
 
 instance Show Value where
-  show (LitV lit       ) = "LitV " ++ show lit
-  show (LambdaV _ arg e) = "<λ: " ++ " " ++ show arg ++ " " ++ show e ++ ">"
+  show (LitV lit) = "LitV " ++ show lit
+  show (LambdaV ty _ arg e) =
+    "<λ: " ++ show ty ++ " " ++ show arg ++ " " ++ show e ++ ">"
   show (BuiltinV name _) = "<builtin " ++ name ++ ">"
 
 

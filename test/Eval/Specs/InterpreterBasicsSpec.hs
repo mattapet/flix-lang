@@ -14,25 +14,24 @@ import           Test.Util
 spec :: Spec
 spec = do
   describe "substitution" $ do
-    let
-      testSuite =
-        [ (App (Lam "x" (Var "x")) (Lit (Int 1)), LitV (Int 1))
-        , ( App (Lam "a" (Var "a")) (Lam "c" (Var "c"))
-          , LambdaV empty "c" (Var "c")
-          )
-        , ( App (Lam "f" (App (Var "f") (Lit (Int 1))))
-                (App (Var "+") (Lit (Int 1)))
-          , LitV (Int 2)
-          )
-        , (Bind ("x", Lit (Int 1)) (Var "x"), LitV (Int 1))
-        , ( App
-            (Bind ("x", Lit (Int 1))
-                  (Lam "y" (App (App (Var "+") (Var "x")) (Var "y")))
+    let testSuite =
+          [ (App (Lam "x" (Var "x")) (Lit (Int 1)), LitV (Int 1))
+          , ( App (Lam "a" (Var "a")) (Lam "c" (Var "c"))
+            , LambdaV AnyTy empty "c" (Var "c")
             )
-            (Lit (Int 1))
-          , LitV (Int 2)
-          )
-        ]
+          , ( App (Lam "f" (App (Var "f") (Lit (Int 1))))
+                  (App (Var "+") (Lit (Int 1)))
+            , LitV (Int 2)
+            )
+          , (Bind ("x", Lit (Int 1)) (Var "x"), LitV (Int 1))
+          , ( App
+              (Bind ("x", Lit (Int 1))
+                    (Lam "y" (App (App (Var "+") (Var "x")) (Var "y")))
+              )
+              (Lit (Int 1))
+            , LitV (Int 2)
+            )
+          ]
     forM_ testSuite $ \(in', out) ->
       it (printf "evaluates %s to %s" (show in') (show out)) $ do
         show . fst <$> eval builtins in' `shouldBe` Right (show out)

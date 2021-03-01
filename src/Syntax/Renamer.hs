@@ -85,12 +85,12 @@ rename' (Decl d) = Decl <$> renameDecl d
 -- Expressions
 
 renameExpr :: Expr -> Result Expr
-renameExpr Underscore            = return Underscore
-renameExpr val@BoolLiteral{}     = return val
-renameExpr val@NumberLiteral{}   = return val
-renameExpr val@OperatorCapture{} = return val
-renameExpr (Tuple      values)   = Tuple <$> traverse renameExpr values
-renameExpr (Identifier x     )   = Identifier <$> renameName x
+renameExpr Underscore               = return Underscore
+renameExpr val@BoolLiteral{}        = return val
+renameExpr val@NumberLiteral{}      = return val
+renameExpr (OperatorCapture x     ) = OperatorCapture <$> renameName x
+renameExpr (Tuple           values) = Tuple <$> traverse renameExpr values
+renameExpr (Identifier      x     ) = Identifier <$> renameName x
 
 renameExpr (BinOp op lhs rhs) =
   liftA3 BinOp (renameName op) (renameExpr lhs) (renameExpr rhs)
