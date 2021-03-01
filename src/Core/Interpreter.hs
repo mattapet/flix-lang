@@ -3,7 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Eval.Interpreter
+module Core.Interpreter
   ( eval
   ) where
 
@@ -13,12 +13,13 @@ import           Control.Applicative            ( (<|>)
                                                 )
 import           Control.Monad.Extra            ( bind2 )
 import           Control.Monad.StateT
+import           Core.Expr
 import           Data.Functor                   ( ($>) )
 import qualified Data.Map                      as Map
 import           Data.Maybe                     ( fromMaybe )
-import           Eval.Core
+import           Data.Types
 
-eval :: Environment -> CoreExpr -> Either String (Value, Environment)
+eval :: Environment -> Expr -> Either String (Value, Environment)
 eval env = flip runStateT env . runResult . eval'
 
 newtype Result a = Result { runResult :: StateT Environment (Either String) a }
@@ -50,7 +51,7 @@ getConstructors = env_constr <$> getEnv
 
 -- Evaluation
 
-eval' :: CoreExpr -> Result Value
+eval' :: Expr -> Result Value
 eval' (Lit x       ) = return $ LitV x
 eval' (Var x       ) = liftA2 bindType (lookupType x) (lookupVariable x)
 eval' (Lam arg body) = do
@@ -85,13 +86,13 @@ applyType _          v                 = v
 
 -- Pattern matching
 
-patternMatch :: [PatternCase] -> Value -> Result (Maybe CoreExpr)
+patternMatch :: [PatternCase] -> Value -> Result (Maybe Expr)
 patternMatch []       _     = return Nothing
 patternMatch (x : xs) value = do
   liftA2 (<|>) (tryMatch x value) (patternMatch xs value)
   where tryMatch x' = (<|> return Nothing) . patternMatch' x'
 
-patternMatch' :: PatternCase -> Value -> Result (Maybe CoreExpr)
+patternMatch' :: PatternCase -> Value -> Result (Maybe Expr)
 patternMatch' (DefaultP, result) _ = return $ Just result
 -- Matching literals
 patternMatch' (LitP x, result) (LitV y) | x == y    = return $ Just result
@@ -170,14 +171,14 @@ first n v = eval' (select' 1 n) >>= apply v
 dropFirst :: Int -> Value -> Result Value
 dropFirst n v = eval' (drop' 1 n) >>= apply v
 
-select' :: Int -> Int -> CoreExpr
+select' :: Int -> Int -> Expr
 select' x n = mkLams args selector
   where
     args     = toArg <$> [1 .. n]
     selector = Var $ toArg x
     toArg    = ("$" ++) . show
 
-drop' :: Int -> Int -> CoreExpr
+drop' :: Int -> Int -> Expr
 drop' d n = foldr (Lam . toArg) apply' [1 .. n]
   where
     apply' = Lam "_" (Var "_" `mkApps` (Var . toArg <$> [(d + 1) .. n]))

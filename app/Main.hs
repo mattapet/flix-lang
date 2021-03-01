@@ -1,13 +1,13 @@
 module Main where
 
 import           Control.Monad                  ( (>=>) )
-import           Eval.Builtin
-import           Eval.Core                      ( Environment(..) )
-import           Eval.Interpreter
-import           Syntax.Core
-import           Syntax.Desugar
-import           Syntax.Parser
-import           Syntax.Renamer
+import           Core.Builtin
+import           Core.Expr                      ( Environment(..) )
+import           Core.Interpreter
+import           Flix.Desugar
+import           Flix.Parser
+import           Flix.Renamer
+import           Flix.Syntax
 
 import           System.Environment
 

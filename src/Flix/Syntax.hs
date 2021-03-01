@@ -1,4 +1,4 @@
-module Syntax.Core where
+module Flix.Syntax where
 
 type Name = String
 type OpName = String

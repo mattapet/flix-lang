@@ -1,9 +1,9 @@
-module Syntax.Specs.ParserSpec
+module Flix.Specs.ParserSpec
   ( spec
   ) where
 
-import           Syntax.Core
-import           Syntax.Parser                  ( parse )
+import           Flix.Parser                    ( parse )
+import           Flix.Syntax
 import           Test.Hspec
 import           Test.Util
 

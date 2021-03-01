@@ -3,14 +3,15 @@ module Integration.Specs.EvalSpec
   ) where
 
 import           Control.Monad                  ( (>=>) )
-import           Eval.Builtin                   ( builtins )
-import           Eval.Core
-import           Eval.Interpreter               ( eval )
-import           Syntax.Desugar                 ( desugar
+import           Core.Builtin                   ( builtins )
+import           Core.Expr
+import           Core.Interpreter               ( eval )
+import           Data.Types
+import           Flix.Desugar                   ( desugar
                                                 , makeEmptyState
                                                 )
-import           Syntax.Parser                  ( parse )
-import           Syntax.Renamer                 ( rename )
+import           Flix.Parser                    ( parse )
+import           Flix.Renamer                   ( rename )
 
 import           Test.Hspec
 

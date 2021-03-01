@@ -1,8 +1,8 @@
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleContexts #-}
 
-module Syntax.Parser
+module Flix.Parser
   ( parse
   ) where
 
@@ -12,45 +12,18 @@ import           Control.Applicative            ( liftA2
 import           Control.Monad.Extra            ( bind2 )
 import           Data.Char                      ( isUpper )
 import           Data.Functor                   ( ($>) )
-import           Syntax.Core
+import           Flix.Syntax
 import           Text.Parsec             hiding ( parse
                                                 , space
                                                 , spaces
                                                 )
 
-space :: Parsec String u Char
-space = char ' '
+parse :: String -> Either String AST
+parse = mapLeft show . runParser (ast <* eof) () ""
+  where mapLeft f = either (Left . f) Right
 
-eol :: Parsec String u String
-eol =
-  try (string "\r\n")
-    <|> try (string "\n\r")
-    <|> string "\n"
-    <|> string "\r"
-    <?> "end of line"
-
-anySpace :: Parsec String u String
-anySpace = (: []) <$> space <|> eol
-
-spaces :: Parsec String u ()
-spaces = skipMany space
-
-anySpaces :: Parsec String u ()
-anySpaces = skipMany anySpace
-
-keywords :: [String]
-keywords =
-  [ "if"
-  , "then"
-  , "else"
-  , "let"
-  , "true"
-  , "false"
-  , "match"
-  , "case"
-  , "module"
-  , "record"
-  ]
+ast :: Parsec String u AST
+ast = (Decl <$> try decl) <|> (Expr <$> try expr)
 
 -- Atoms
 
@@ -96,7 +69,7 @@ stringLiteral = transform <$> (char '"' *> many character <* char '"')
   where
     character = nonEscape <|> escape
     nonEscape = noneOf "\\\"\0\n\r\v\t\b\f"
-    escape    = char '\\' *> oneOf "\\'0nrvtbf"
+    escape    = char '\\' *> oneOf "\\\"0nrvtbf"
     transform xs = foldr (BinOp ":") (Identifier "Nil") (CharLiteral <$> xs)
 
 number :: Parsec String u Integer
@@ -257,9 +230,38 @@ decl :: Parsec String u Decl
 decl = anySpaces *> (try moduleDecl <|> try record) <* anySpaces
 
 
-ast :: Parsec String u AST
-ast = (Decl <$> try decl) <|> (Expr <$> try expr)
+-- Primitive parsers
 
-parse :: String -> Either String AST
-parse = mapLeft show . runParser (ast <* eof) () ""
-  where mapLeft f = either (Left . f) Right
+space :: Parsec String u Char
+space = char ' '
+
+eol :: Parsec String u String
+eol =
+  try (string "\r\n")
+    <|> try (string "\n\r")
+    <|> string "\n"
+    <|> string "\r"
+    <?> "end of line"
+
+anySpace :: Parsec String u String
+anySpace = (: []) <$> space <|> eol
+
+spaces :: Parsec String u ()
+spaces = skipMany space
+
+anySpaces :: Parsec String u ()
+anySpaces = skipMany anySpace
+
+keywords :: [String]
+keywords =
+  [ "if"
+  , "then"
+  , "else"
+  , "let"
+  , "true"
+  , "false"
+  , "match"
+  , "case"
+  , "module"
+  , "record"
+  ]

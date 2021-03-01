@@ -1,9 +1,9 @@
-module Syntax.Specs.RenamerSpec
+module Flix.Specs.RenamerSpec
   ( spec
   ) where
 
-import           Syntax.Core
-import           Syntax.Renamer                 ( rename )
+import           Flix.Renamer                   ( rename )
+import           Flix.Syntax
 import           Test.Hspec
 import           Test.Util
 

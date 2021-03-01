@@ -1,9 +1,10 @@
-module Eval.Builtin
+module Core.Builtin
   ( builtins
   ) where
 
+import           Core.Expr
 import           Data.Map
-import           Eval.Core
+import           Data.Types
 
 builtins :: Environment
 builtins = Environment

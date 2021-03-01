@@ -1,31 +1,29 @@
-module Eval.Core where
+module Core.Expr where
 
 import           Data.Map                       ( Map )
+import           Data.Types
 
 infix 4 `Bind`, `mkApps`, `App`
-
-data Literal =
-    Bool Bool
-  | Int Integer
-  | Char Char
-  deriving (Show, Eq)
+infixr :~>
 
 -- Core expressions
 
-data CoreExpr =
+type CoreExpr = Expr
+
+data Expr =
     Lit Literal
   | Var Name
-  | App CoreExpr Arg
+  | App Expr Arg
   | Bind Bind Body
   | Lam Name Body
-  | Case CoreExpr [PatternCase]
+  | Case Expr [PatternCase]
   deriving (Show, Eq)
 
 type Name = String
-type Arg = CoreExpr
-type Body = CoreExpr
+type Arg = Expr
+type Body = Expr
 type Bind = (Name, Arg)
-type PatternCase = (Pattern, CoreExpr)
+type PatternCase = (Pattern, Expr)
 
 data Pattern =
     LitP Literal
@@ -49,7 +47,7 @@ type Builtin = Value -> Either String Value
 
 data Value =
     LitV Literal
-  | LambdaV Ty Scope Name CoreExpr
+  | LambdaV Ty Scope Name Expr
   | BuiltinV Name Builtin
 
 instance Show Value where
@@ -69,11 +67,11 @@ data Ty =
 
 -- Helper building functions
 
-mkApps :: CoreExpr -> [Arg] -> CoreExpr
+mkApps :: Expr -> [Arg] -> Expr
 mkApps = foldl App
 
-mkLams :: [Name] -> CoreExpr -> CoreExpr
+mkLams :: [Name] -> Expr -> Expr
 mkLams args body = foldr Lam body args
 
-mkBinds :: [Bind] -> CoreExpr -> CoreExpr
+mkBinds :: [Bind] -> Expr -> Expr
 mkBinds binds body = foldr Bind body binds

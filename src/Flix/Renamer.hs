@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 
-module Syntax.Renamer
+module Flix.Renamer
   ( rename
   ) where
 
@@ -20,7 +20,7 @@ import           Data.Map                       ( (!?)
                                                 , insert
                                                 )
 import           Data.Maybe                     ( fromMaybe )
-import           Syntax.Core
+import           Flix.Syntax
 
 rename :: AST -> Either String AST
 rename = (fst <$>) . flip runStateT makeEmptyState . rename'
@@ -29,6 +29,7 @@ rename = (fst <$>) . flip runStateT makeEmptyState . rename'
 type Result a = StateT RenamerState (Either String) a
 
 -- Renaming State
+
 data RenamerState = RenamerState
   { state_substitutions     :: [(Name, Name)]
   , state_uniqueNameCounter :: Map String Int

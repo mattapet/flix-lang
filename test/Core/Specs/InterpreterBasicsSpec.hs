@@ -1,12 +1,13 @@
-module Eval.Specs.InterpreterBasicsSpec
+module Core.Specs.InterpreterBasicsSpec
   ( spec
   ) where
 
 
+import           Core.Builtin                   ( builtins )
+import           Core.Expr
+import           Core.Interpreter               ( eval )
 import           Data.Map                       ( empty )
-import           Eval.Builtin                   ( builtins )
-import           Eval.Core
-import           Eval.Interpreter               ( eval )
+import           Data.Types
 import           Test.Hspec
 import           Test.Util
 

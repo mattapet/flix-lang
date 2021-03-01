@@ -1,13 +1,14 @@
-module Eval.Specs.PatternMatchingSpec
+module Core.Specs.PatternMatchingSpec
   ( spec
   ) where
 
+import           Core.Builtin
+import           Core.Expr
+import           Core.Interpreter               ( eval )
 import           Data.Map                       ( empty
                                                 , fromList
                                                 )
-import           Eval.Builtin
-import           Eval.Core
-import           Eval.Interpreter               ( eval )
+import           Data.Types
 import           Test.Hspec
 import           Test.Util
 
