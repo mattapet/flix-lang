@@ -88,6 +88,7 @@ renameExpr :: Expr -> Result Expr
 renameExpr Underscore               = return Underscore
 renameExpr val@BoolLiteral{}        = return val
 renameExpr val@NumberLiteral{}      = return val
+renameExpr val@CharLiteral{}        = return val
 renameExpr (OperatorCapture x     ) = OperatorCapture <$> renameName x
 renameExpr (Tuple           values) = Tuple <$> traverse renameExpr values
 renameExpr (Identifier      x     ) = Identifier <$> renameName x

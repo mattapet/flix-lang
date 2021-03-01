@@ -10,6 +10,7 @@ data Expr =
     Underscore
   | BoolLiteral Bool
   | NumberLiteral Integer
+  | CharLiteral Char
   | Identifier String
   | Constructor String
   | Call Expr [Expr]

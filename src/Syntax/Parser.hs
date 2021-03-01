@@ -84,6 +84,21 @@ boolean = spaces *> (true <|> false) <* spaces
     true  = string "true" *> notFollowedBy identifierChar $> True
     false = string "false" *> notFollowedBy identifierChar $> False
 
+charLiteral :: Parsec String u Char
+charLiteral = char '\'' *> character <* char '\''
+  where
+    character = nonEscape <|> escape
+    nonEscape = noneOf "\\\"\0\n\r\v\t\b\f"
+    escape    = char '\\' *> oneOf "\\'0nrvtbf"
+
+stringLiteral :: Parsec String u Expr
+stringLiteral = transform <$> (char '"' *> many character <* char '"')
+  where
+    character = nonEscape <|> escape
+    nonEscape = noneOf "\\\"\0\n\r\v\t\b\f"
+    escape    = char '\\' *> oneOf "\\'0nrvtbf"
+    transform xs = foldr (BinOp ":") (Identifier "Nil") (CharLiteral <$> xs)
+
 number :: Parsec String u Integer
 number = spaces *> (positive <|> negative) <* spaces
   where
@@ -133,6 +148,8 @@ atom = foldl1 (<|>) atoms
         <$> [ underscore
             , BoolLiteral <$> boolean
             , NumberLiteral <$> number
+            , CharLiteral <$> charLiteral
+            , stringLiteral
             , identifierOrConstructor
             , list
             , lambda

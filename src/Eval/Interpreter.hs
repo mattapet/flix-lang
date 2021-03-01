@@ -94,12 +94,8 @@ patternMatch (x : xs) value = do
 patternMatch' :: PatternCase -> Value -> Result (Maybe CoreExpr)
 patternMatch' (DefaultP, result) _ = return $ Just result
 -- Matching literals
-patternMatch' (LitP (Int x), result) (LitV (Int y))
-  | x == y    = return $ Just result
-  | otherwise = return Nothing
-patternMatch' (LitP (Bool x), result) (LitV (Bool y))
-  | x == y    = return $ Just result
-  | otherwise = return Nothing
+patternMatch' (LitP x, result) (LitV y) | x == y    = return $ Just result
+                                        | otherwise = return Nothing
 
 -- Matching variables
 patternMatch' (VarP   name, result) value = bindValue name value $> Just result

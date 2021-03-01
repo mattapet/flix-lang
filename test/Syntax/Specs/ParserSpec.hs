@@ -23,11 +23,21 @@ spec = do
           , ("(1)"   , NumberLiteral 1)
           , ("()"    , Tuple [])
           , ("(1, 2)", Tuple [NumberLiteral 1, NumberLiteral 2])
-          , ("x"     , Identifier "x")
-          , ("x'"    , Identifier "x'")
-          , ("Nil"   , Constructor "Nil")
-          , ("a_b"   , Identifier "a_b")
-          , ("f a"   , Call (Identifier "f") [Identifier "a"])
+          , ("'x'"   , CharLiteral 'x')
+          , ( "\"xyz\""
+            , BinOp
+              ":"
+              (CharLiteral 'x')
+              (BinOp ":"
+                     (CharLiteral 'y')
+                     (BinOp ":" (CharLiteral 'z') (Identifier "Nil"))
+              )
+            )
+          , ("x"    , Identifier "x")
+          , ("x'"   , Identifier "x'")
+          , ("Nil"  , Constructor "Nil")
+          , ("a_b"  , Identifier "a_b")
+          , ("f a"  , Call (Identifier "f") [Identifier "a"])
           , ("f a b", Call (Identifier "f") [Identifier "a", Identifier "b"])
           , ( "x+y+z"
             , BinOp "+"

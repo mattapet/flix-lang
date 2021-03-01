@@ -7,6 +7,7 @@ infix 4 `Bind`, `mkApps`, `App`
 data Literal =
     Bool Bool
   | Int Integer
+  | Char Char
   deriving (Show, Eq)
 
 -- Core expressions

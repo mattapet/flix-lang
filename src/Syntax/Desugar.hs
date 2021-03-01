@@ -66,6 +66,7 @@ desugar' (S.Decl e) = desugarDecl e
 desugarExpr :: S.Expr -> Result C.CoreExpr
 desugarExpr (S.BoolLiteral     x     ) = return $ C.Lit $ C.Bool x
 desugarExpr (S.NumberLiteral   x     ) = return $ C.Lit $ C.Int x
+desugarExpr (S.CharLiteral     x     ) = return $ C.Lit $ C.Char x
 desugarExpr (S.Identifier      x     ) = return $ C.Var x
 desugarExpr (S.Constructor     x     ) = return $ C.Var x
 desugarExpr (S.OperatorCapture x     ) = return $ C.Var x
