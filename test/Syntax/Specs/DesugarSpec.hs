@@ -5,7 +5,10 @@ module Syntax.Specs.DesugarSpec
 import qualified Data.Map                      as Map
 import qualified Eval.Core                     as C
 import qualified Syntax.Core                   as S
-import           Syntax.Desugar                 ( desugar )
+import           Syntax.Desugar                 ( DesugarState(..)
+                                                , desugar
+                                                , makeEmptyState
+                                                )
 import           Test.Hspec
 import           Test.Util
 
@@ -29,7 +32,7 @@ spec = do
         ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        (fst <$> desugar (S.Expr in')) `shouldBe` Right out
+        (fst <$> desugar makeEmptyState (S.Expr in')) `shouldBe` Right out
 
   describe "Calls" $ do
     let testSuite =
@@ -49,7 +52,7 @@ spec = do
           ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        (fst <$> desugar (S.Expr in')) `shouldBe` Right out
+        (fst <$> desugar makeEmptyState (S.Expr in')) `shouldBe` Right out
 
   describe "Basic Bindings" $ do
     let
@@ -81,7 +84,7 @@ spec = do
         ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        (fst <$> desugar (S.Expr in')) `shouldBe` Right out
+        (fst <$> desugar makeEmptyState (S.Expr in')) `shouldBe` Right out
 
   describe "Bindings in Blocks" $ do
     let testSuite =
@@ -105,7 +108,7 @@ spec = do
           ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        (fst <$> desugar (S.Expr in')) `shouldBe` Right out
+        (fst <$> desugar makeEmptyState (S.Expr in')) `shouldBe` Right out
 
   describe "Invalid blocks" $ do
     let testSuite =
@@ -116,7 +119,7 @@ spec = do
           ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        (fst <$> desugar (S.Expr in')) `shouldBe` Left out
+        (fst <$> desugar makeEmptyState (S.Expr in')) `shouldBe` Left out
 
 
   describe "Case expressions" $ do
@@ -159,7 +162,7 @@ spec = do
         ]
     forM_ testSuite $ \(in', out) ->
       it (printf "translates %s to %s" (show in') (show out)) $ do
-        (fst <$> desugar (S.Expr in')) `shouldBe` Right out
+        (fst <$> desugar makeEmptyState (S.Expr in')) `shouldBe` Right out
 
   describe "pattern matching let bindings" $ do
     let testSuites =
@@ -187,7 +190,44 @@ spec = do
           ]
     forM_ testSuites $ \(in', out) ->
       it (printf "translated %s" (show in')) $ do
-        (fst <$> desugar (S.Expr in')) `shouldBe` Right out
+        (fst <$> desugar makeEmptyState (S.Expr in')) `shouldBe` Right out
+
+  describe "Constructor pattern matching" $ do
+    it "creates a constructor pattern match" $ do
+      let input = S.Expr $ S.Match
+            (S.Identifier "xs")
+            [ ( S.Call (S.Identifier ":") [S.Identifier "x", S.Underscore]
+              , S.BoolLiteral True
+              )
+            ]
+      let output = C.Case
+            (C.Var "xs")
+            [ ( C.ConstrP (C.AnyTy C.:~> (C.AnyTy C.:~> C.NominalTy ":"))
+                          [C.VarP "x", C.DefaultP]
+              , C.Lit $ C.Bool True
+              )
+            ]
+      let tys = Map.fromList
+            [(":", C.AnyTy C.:~> (C.AnyTy C.:~> C.NominalTy ":"))]
+      desugar (DesugarState 0 tys) input `shouldBe` Right (output, tys)
+
+    it "errors on unknown constructor" $ do
+      let input = S.Expr $ S.Match
+            (S.Identifier "xs")
+            [ ( S.Call (S.Identifier ":") [S.Identifier "x", S.Underscore]
+              , S.BoolLiteral True
+              )
+            ]
+      let output = C.Case
+            (C.Var "xs")
+            [ ( C.ConstrP (C.AnyTy C.:~> (C.AnyTy C.:~> C.NominalTy ":"))
+                          [C.VarP "x", C.DefaultP]
+              , C.Lit $ C.Bool True
+              )
+            ]
+      desugar makeEmptyState input `shouldBe` Left "Constructor ':' not found"
+
+
 
   describe "Declarations" $ do
     let
@@ -247,4 +287,4 @@ spec = do
         ]
     forM_ tesSuite $ \(in', out, ty) ->
       it (printf "translates declaration %s" (show in')) $ do
-        desugar (S.Decl in') `shouldBe` Right (out, ty)
+        desugar makeEmptyState (S.Decl in') `shouldBe` Right (out, ty)

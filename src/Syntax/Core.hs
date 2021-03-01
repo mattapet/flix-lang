@@ -11,6 +11,7 @@ data Expr =
   | BoolLiteral Bool
   | NumberLiteral Integer
   | Identifier String
+  | Constructor String
   | Call Expr [Expr]
   | BinOp OpName Expr Expr
   | OperatorCapture OpName

@@ -2,7 +2,9 @@ module Eval.Specs.PatternMatchingSpec
   ( spec
   ) where
 
-import           Data.Map                       ( empty )
+import           Data.Map                       ( empty
+                                                , fromList
+                                                )
 import           Eval.Builtin
 import           Eval.Core
 import           Eval.Interpreter               ( eval )

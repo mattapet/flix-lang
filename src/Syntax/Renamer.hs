@@ -91,6 +91,7 @@ renameExpr val@NumberLiteral{}      = return val
 renameExpr (OperatorCapture x     ) = OperatorCapture <$> renameName x
 renameExpr (Tuple           values) = Tuple <$> traverse renameExpr values
 renameExpr (Identifier      x     ) = Identifier <$> renameName x
+renameExpr (Constructor     x     ) = Constructor <$> renameName x
 
 renameExpr (BinOp op lhs rhs) =
   liftA3 BinOp (renameName op) (renameExpr lhs) (renameExpr rhs)

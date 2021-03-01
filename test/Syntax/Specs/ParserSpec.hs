@@ -25,6 +25,7 @@ spec = do
           , ("(1, 2)", Tuple [NumberLiteral 1, NumberLiteral 2])
           , ("x"     , Identifier "x")
           , ("x'"    , Identifier "x'")
+          , ("Nil"   , Constructor "Nil")
           , ("a_b"   , Identifier "a_b")
           , ("f a"   , Call (Identifier "f") [Identifier "a"])
           , ("f a b", Call (Identifier "f") [Identifier "a", Identifier "b"])
@@ -161,6 +162,16 @@ spec = do
                     [LetMatch "x" [([], NumberLiteral 123)], Identifier "x"]
                   )
                 , (Underscore, NumberLiteral 0)
+                ]
+              )
+            , ( "match (1 : ()) {   \n\
+                \  case (x : _) => true \n\
+                \  case _ => 0          \n\
+                \}"
+              , Match
+                (BinOp ":" (NumberLiteral 1) (Tuple []))
+                [ (BinOp ":" (Identifier "x") Underscore, BoolLiteral True)
+                , (Underscore                           , NumberLiteral 0)
                 ]
               )
             ]

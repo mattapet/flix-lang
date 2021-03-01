@@ -6,7 +6,9 @@ import           Control.Monad                  ( (>=>) )
 import           Eval.Builtin                   ( builtins )
 import           Eval.Core
 import           Eval.Interpreter               ( eval )
-import           Syntax.Desugar                 ( desugar )
+import           Syntax.Desugar                 ( desugar
+                                                , makeEmptyState
+                                                )
 import           Syntax.Parser                  ( parse )
 import           Syntax.Renamer                 ( rename )
 
@@ -132,16 +134,17 @@ spec = do
       let
         in'
           = " module TestModule                   \n\
+            \ record (:) head tail                \n\
             \ let head x = (x)                    \n\
             \ let tail x = match x {              \n\
             \   case () => ()                     \n\
-            \   case (_, tail) => tail            \n\
+            \   case (_:tail) => tail            \n\
             \ }                                   \n\
             \ let length xs = match xs {          \n\
             \    case () => 0                     \n\
-            \    case (_, tail) => 1 + length tail\n\
+            \    case (_:tail) => 1 + length tail \n\
             \ }                                   \n\
-            \ length (1, (2, (3, (4, (5, ())))))"
+            \ length (1 : 2 : 3 : 4 : 5 : ())"
       let out = LitV (Int 5)
       show <$> run in' `shouldBe` Right (show out)
 
@@ -212,7 +215,7 @@ spec = do
             \ let equals () () = true             \n\
             \     equals () _  = false            \n\
             \     equals _  () = false            \n\
-            \     equals (x, xs) (y, ys) =        \n\
+            \     equals (x : xs) (y : ys) =      \n\
             \       if x == y then xs `equals` ys \n\
             \                 else false          \n\
             \                                     \n\
@@ -268,8 +271,72 @@ spec = do
             LambdaV (NominalTy "TestModule.Nil_$1") mempty "_$4" (Var "_$4")
       show <$> run in' `shouldBe` Right (show out)
 
+    it "match on constructor type" $ do
+      let
+        in'
+          = " module TestModule           \n\
+          \   record (:) head tail        \n\
+          \   record Nil                  \n\
+          \                               \n\
+          \   let xs = 1 : 5 : Nil        \n\
+          \                               \n\ 
+          \   match xs {                  \n\
+          \     case (x:_) => x           \n\
+          \   }                           \n\
+          \"
+      let out = LitV $ Int 1
+      show <$> run in' `shouldBe` Right (show out)
+
+    it "falls-through missed constructor type" $ do
+      let
+        in'
+          = " module TestModule           \n\
+          \   record (:) head tail        \n\
+          \                               \n\ 
+          \   match (1, 2) {              \n\
+          \     case (x:_) => x           \n\
+          \     case _ => false           \n\
+          \   }                           \n\
+          \"
+      let out = LitV $ Bool False
+      show <$> run in' `shouldBe` Right (show out)
+
+    it "matches type recursively" $ do
+      let
+        in'
+          = " module TestModule           \n\
+          \   record (:) head tail        \n\
+          \   record Nil                  \n\
+          \                               \n\
+          \   let xs = 1 : 2 : 3 : Nil    \n\
+          \                               \n\ 
+          \   match xs {                  \n\
+          \     case (x:5:y:Nil) => x - y \n\
+          \     case (x:2:y:Nil) => x + y \n\
+          \     case _ => false           \n\
+          \   }                           \n\
+          \"
+      let out = LitV $ Int 4
+      show <$> run in' `shouldBe` Right (show out)
+
+    it "matches constructor names" $ do
+      let
+        in'
+          = " module TestModule            \n\
+          \   record (:) head tail         \n\
+          \   record Nil                   \n\
+          \                                \n\
+          \   let foldr f b Nil = b        \n\
+          \       foldr f b (x : xs) =     \n\
+          \             f (foldr f b xs) x \n\
+          \                                \n\
+          \   foldr (+) 0 (1 : 2 : 3 : Nil)\n\
+          \"
+      let out = LitV $ Int 6
+      show <$> run in' `shouldBe` Right (show out)
+
 run :: String -> Either String Value
-run = parse >=> rename >=> desugar >=> (fst <$>) . unpack
+run = parse >=> rename >=> desugar makeEmptyState >=> (fst <$>) . unpack
   where
     unpack (core, constrs) = eval (Environment b constrs) core
     (Environment b _) = builtins

@@ -10,6 +10,7 @@ import           Control.Applicative            ( liftA2
                                                 , liftA3
                                                 )
 import           Control.Monad.Extra            ( bind2 )
+import           Data.Char                      ( isUpper )
 import           Data.Functor                   ( ($>) )
 import           Syntax.Core
 import           Text.Parsec             hiding ( parse
@@ -89,6 +90,12 @@ number = spaces *> (positive <|> negative) <* spaces
     positive = read <$> many1 digit
     negative = negate <$> (char '-' *> positive)
 
+identifierOrConstructor :: Parsec String u Expr
+identifierOrConstructor = wrap <$> identifier
+  where
+    wrap id' | isUpper $ head id' = Constructor id'
+             | otherwise          = Identifier id'
+
 lambda :: Parsec String u Expr
 lambda = spaces *> braces body <* spaces
   where
@@ -119,7 +126,7 @@ atom = foldl1 (<|>) atoms
         <$> [ underscore
             , BoolLiteral <$> boolean
             , NumberLiteral <$> number
-            , Identifier <$> identifier
+            , identifierOrConstructor
             , lambda
             , block
             , parens

@@ -3,6 +3,8 @@
 
 module Syntax.Desugar
   ( desugar
+  , makeEmptyState
+  , DesugarState(..)
   ) where
 
 import           Control.Applicative            ( liftA2 )
@@ -13,8 +15,8 @@ import qualified Data.Map                      as Map
 import qualified Eval.Core                     as C
 import qualified Syntax.Core                   as S
 
-desugar :: S.AST -> Either String (C.CoreExpr, C.Constructors)
-desugar ast = unwrap <$> runStateT (desugar' ast) makeEmptyState
+desugar :: DesugarState -> S.AST -> Either String (C.CoreExpr, C.Constructors)
+desugar state ast = unwrap <$> runStateT (desugar' ast) state
   where unwrap = (state_constructors <$>)
 
 data DesugarState = DesugarState
@@ -47,6 +49,11 @@ bindConstructor n ty = do
   constrs <- state_constructors <$> getState
   setConstructors $ Map.insert n ty constrs
 
+lookupConstr :: C.Name -> Result C.Ty
+lookupConstr n = getState >>= unpack . (Map.!? n) . state_constructors
+  where
+    unpack (Just ty) = return ty
+    unpack Nothing   = fail $ "Constructor '" ++ n ++ "' not found"
 
 type Result a = StateT DesugarState (Either String) a
 
@@ -60,6 +67,7 @@ desugarExpr :: S.Expr -> Result C.CoreExpr
 desugarExpr (S.BoolLiteral     x     ) = return $ C.Lit $ C.Bool x
 desugarExpr (S.NumberLiteral   x     ) = return $ C.Lit $ C.Int x
 desugarExpr (S.Identifier      x     ) = return $ C.Var x
+desugarExpr (S.Constructor     x     ) = return $ C.Var x
 desugarExpr (S.OperatorCapture x     ) = return $ C.Var x
 desugarExpr (S.Tuple           fields) = do
   nextId' <- nextId
@@ -102,9 +110,16 @@ desugarExpr (S.Match value cases) = do
     go_casePattern (S.BoolLiteral   x ) = return $ C.LitP $ C.Bool x
     go_casePattern (S.NumberLiteral x ) = return $ C.LitP $ C.Int x
     go_casePattern (S.Identifier    x ) = return $ C.VarP x
+    go_casePattern (S.Constructor   x ) = flip C.ConstrP [] <$> go_constrTy x
     go_casePattern (S.Tuple es) = C.TupleP <$> traverse go_casePattern es
+    go_casePattern (S.Call (S.Identifier constr) es) =
+      liftA2 C.ConstrP (go_constrTy constr) (traverse go_casePattern es)
+    go_casePattern (S.BinOp op lhs rhs) =
+      liftA2 C.ConstrP (go_constrTy op) (traverse go_casePattern [lhs, rhs])
     go_casePattern e =
       fail $ "Unsupported pattern match expr '" ++ show e ++ "'"
+
+    go_constrTy = lookupConstr
 
 
 desugarExpr _ = undefined

@@ -66,7 +66,9 @@ eval' (Bind (name, value) context) = pushFrame $ do
 eval' (Case value patterns) = pushFrame $ do
   value' <- eval' value
   result <- patternMatch patterns value'
-  maybe (fail "Pattern match fallthrough on value ") eval' result
+  maybe (fail $ "Pattern match fallthrough on value " ++ show value')
+        eval'
+        result
 
 -- Lambda applications
 
@@ -121,6 +123,18 @@ patternMatch' (TupleP (x : xs), result) value = do
     -- if the current pattern match succeeded, we discard its partial result and
     -- pattern match the tail of the tuple
     continue rest (Just _) = patternMatch' (TupleP xs, result) rest
+
+patternMatch' (ConstrP ty ptrns, result) value@(LambdaV ty' _ _ _) =
+  go_continue $ go_unpackTys ty ty'
+  where
+    go_unpackTys (_ :~> lhs    ) rhs             = go_unpackTys lhs rhs
+    go_unpackTys (NominalTy lhs) (NominalTy rhs) = Just (lhs, rhs)
+    go_unpackTys _               _               = Nothing
+
+    go_continue (Just (lhs, rhs))
+      | lhs == rhs = patternMatch' (TupleP ptrns, result) value
+      | otherwise  = return Nothing
+    go_continue Nothing = return Nothing
 
 -- Unrecognized pattern
 patternMatch' _ _ = return Nothing

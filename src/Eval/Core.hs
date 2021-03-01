@@ -30,6 +30,7 @@ data Pattern =
     LitP Literal
   | VarP Name
   | TupleP [Pattern]
+  | ConstrP Ty [Pattern]
   | DefaultP
   deriving (Show, Eq)
 
