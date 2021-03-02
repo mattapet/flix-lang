@@ -13,7 +13,12 @@ import           Data.Types
 import           Flix.Capabilities
 import           Flix.Syntax
 
-type Context m = (MonadFail m, UniqueNameGeneration m, ConstructorRegistry m)
+type Context m
+  = ( MonadFail m
+    , SymbolAliasRegistry m
+    , UniqueNameGeneration m
+    , ConstructorRegistry m
+    )
 
 desugar :: (Context m) => AST -> m CoreExpr
 desugar (Expr e) = desugarExpr e
@@ -28,6 +33,8 @@ desugarExpr (CharLiteral     x     ) = return $ Lit $ Char x
 desugarExpr (Identifier      x     ) = return $ Var x
 desugarExpr (Constructor     x     ) = return $ Var x
 desugarExpr (OperatorCapture x     ) = return $ Var x
+desugarExpr (StringLiteral xs) = desugarListLiteralExpr $ CharLiteral <$> xs
+desugarExpr (ListLiteral     xs    ) = desugarListLiteralExpr xs
 desugarExpr (Tuple           fields) = do
   nextId' <- generateUniqueName
   fields' <- traverse desugarExpr fields
@@ -136,6 +143,11 @@ desugarDecl' (Record constr fields) =
     go_constrTy    = foldr (:~>) (NominalTy constr) (AnyTy <$ fields)
 
 -- Helper functions
+
+desugarListLiteralExpr :: (Context m) => [Expr] -> m CoreExpr
+desugarListLiteralExpr xs = do
+  (cons, nil) <- liftA2 (,) (lookupSymbolAlias ":") (lookupSymbolAlias "Nil")
+  desugarExpr $ foldr (BinOp cons) (Identifier nil) xs
 
 desugarBlockExprs :: (Context m) => [Expr] -> m CoreExpr
 desugarBlockExprs []                        = fail "Unexpected empty block"

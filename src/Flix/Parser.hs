@@ -64,13 +64,12 @@ charLiteral = char '\'' *> character <* char '\''
     nonEscape = noneOf "\\\"\0\n\r\v\t\b\f"
     escape    = char '\\' *> oneOf "\\'0nrvtbf"
 
-stringLiteral :: Parsec String u Expr
-stringLiteral = transform <$> (char '"' *> many character <* char '"')
+stringLiteral :: Parsec String u String
+stringLiteral = char '"' *> many character <* char '"'
   where
     character = nonEscape <|> escape
     nonEscape = noneOf "\\\"\0\n\r\v\t\b\f"
     escape    = char '\\' *> oneOf "\\\"0nrvtbf"
-    transform xs = foldr (BinOp ":") (Identifier "Nil") (CharLiteral <$> xs)
 
 number :: Parsec String u Integer
 number = spaces *> (positive <|> negative) <* spaces
@@ -84,12 +83,11 @@ identifierOrConstructor = wrap <$> identifier
     wrap id' | isUpper $ head id' = Constructor id'
              | otherwise          = Identifier id'
 
-list :: Parsec String u Expr
+list :: Parsec String u [Expr]
 list = brackets body
   where
     brackets p = spaces *> char '[' *> p <* char ']' <* spaces
-    body = transform <$> expr `sepBy` char ','
-    transform xs = foldr (BinOp ":") (Identifier "Nil") xs
+    body = expr `sepBy` char ','
 
 lambda :: Parsec String u Expr
 lambda = spaces *> braces body <* spaces
@@ -122,9 +120,9 @@ atom = foldl1 (<|>) atoms
             , BoolLiteral <$> boolean
             , NumberLiteral <$> number
             , CharLiteral <$> charLiteral
-            , stringLiteral
+            , StringLiteral <$> stringLiteral
             , identifierOrConstructor
-            , list
+            , ListLiteral <$> list
             , lambda
             , block
             , parens
@@ -152,11 +150,12 @@ binop = bind2 go_next factor (optionMaybe operator')
 
     go_next x Nothing = return x
     go_next x (Just op)
-      | last op == ':' = BinOp op x <$> binop
+      | is_rightAssociative op = BinOp op x <$> binop
       | otherwise = do
         y   <- factor
         op' <- optionMaybe operator'
         go_next (BinOp op x y) op'
+    is_rightAssociative = (`elem` ":.") . last
 
 
 term :: Parsec String u Expr

@@ -13,31 +13,23 @@ spec = do
     describe "Basic expressions" $ do
       let
         testSuite =
-          [ ("_"     , Underscore)
-          , ("true"  , BoolLiteral True)
-          , ("false" , BoolLiteral False)
-          , ("trueF" , Identifier "trueF")
-          , ("false" , BoolLiteral False)
-          , ("1"     , NumberLiteral 1)
-          , ("-1"    , NumberLiteral (-1))
-          , ("(1)"   , NumberLiteral 1)
-          , ("()"    , Tuple [])
+          [ ("_"      , Underscore)
+          , ("true"   , BoolLiteral True)
+          , ("false"  , BoolLiteral False)
+          , ("trueF"  , Identifier "trueF")
+          , ("false"  , BoolLiteral False)
+          , ("1"      , NumberLiteral 1)
+          , ("-1"     , NumberLiteral (-1))
+          , ("(1)"    , NumberLiteral 1)
+          , ("()"     , Tuple [])
           , ("(1, 2)", Tuple [NumberLiteral 1, NumberLiteral 2])
-          , ("'x'"   , CharLiteral 'x')
-          , ( "\"xyz\""
-            , BinOp
-              ":"
-              (CharLiteral 'x')
-              (BinOp ":"
-                     (CharLiteral 'y')
-                     (BinOp ":" (CharLiteral 'z') (Identifier "Nil"))
-              )
-            )
-          , ("x"    , Identifier "x")
-          , ("x'"   , Identifier "x'")
-          , ("Nil"  , Constructor "Nil")
-          , ("a_b"  , Identifier "a_b")
-          , ("f a"  , Call (Identifier "f") [Identifier "a"])
+          , ("'x'"    , CharLiteral 'x')
+          , ("\"xyz\"", StringLiteral "xyz")
+          , ("x"      , Identifier "x")
+          , ("x'"     , Identifier "x'")
+          , ("Nil"    , Constructor "Nil")
+          , ("a_b"    , Identifier "a_b")
+          , ("f a"    , Call (Identifier "f") [Identifier "a"])
           , ("f a b", Call (Identifier "f") [Identifier "a", Identifier "b"])
           , ( "x+y+z"
             , BinOp "+"
@@ -50,11 +42,12 @@ spec = do
                     (NumberLiteral 1)
                     (BinOp ":" (NumberLiteral 2) (Tuple []))
             )
-          , ( "[1, 2]"
-            , BinOp ":"
-                    (NumberLiteral 1)
-                    (BinOp ":" (NumberLiteral 2) (Identifier "Nil"))
+          , ( "f . g . h"
+            , BinOp "."
+                    (Identifier "f")
+                    (BinOp "." (Identifier "g") (Identifier "h"))
             )
+          , ("[1, 2]"     , ListLiteral [NumberLiteral 1, NumberLiteral 2])
           , ("(+)"        , OperatorCapture "+")
           , ("let x = 2"  , LetMatch "x" [([], NumberLiteral 2)])
           , ("let f a = a", LetMatch "f" [([Identifier "a"], Identifier "a")])

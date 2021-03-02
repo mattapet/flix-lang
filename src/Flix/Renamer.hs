@@ -27,14 +27,16 @@ rename (Decl d) = Decl <$> renameDecl d
 -- Expressions
 
 renameExpr :: Renaming m => Expr -> m Expr
-renameExpr Underscore               = return Underscore
-renameExpr val@BoolLiteral{}        = return val
-renameExpr val@NumberLiteral{}      = return val
-renameExpr val@CharLiteral{}        = return val
-renameExpr (OperatorCapture x     ) = OperatorCapture <$> renameName x
-renameExpr (Tuple           values) = Tuple <$> traverse renameExpr values
-renameExpr (Identifier      x     ) = Identifier <$> renameName x
-renameExpr (Constructor     x     ) = Constructor <$> renameName x
+renameExpr Underscore           = return Underscore
+renameExpr val@BoolLiteral{}    = return val
+renameExpr val@NumberLiteral{}  = return val
+renameExpr val@CharLiteral{}    = return val
+renameExpr val@StringLiteral{}  = return val
+renameExpr (OperatorCapture x ) = OperatorCapture <$> renameName x
+renameExpr (ListLiteral     xs) = ListLiteral <$> traverse renameExpr xs
+renameExpr (Tuple           xs) = Tuple <$> traverse renameExpr xs
+renameExpr (Identifier      x ) = Identifier <$> renameName x
+renameExpr (Constructor     x ) = Constructor <$> renameName x
 
 renameExpr (BinOp op lhs rhs) =
   liftA3 BinOp (renameName op) (renameExpr lhs) (renameExpr rhs)
