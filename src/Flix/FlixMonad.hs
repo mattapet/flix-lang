@@ -2,9 +2,11 @@
 
 module Flix.FlixMonad where
 
+import           Control.Applicative            ( liftA2 )
 import           Control.Lens
 import           Control.Monad.ExceptT
 import           Control.Monad.StateT
+import           Data.Functor                   ( ($>) )
 import qualified Data.Map                      as Map
 import           Data.Maybe                     ( fromMaybe )
 import           Flix.Capabilities
@@ -68,16 +70,18 @@ instance (Monad m) => SymbolAliasRegistry (FlixMonadT m) where
     where lookup' = fromMaybe name . lookup name
 
   registerSymbol name = do
-    nextId <- generateNewId <$> getState
-    m      <- getCurrentModule
-    let newSymbolName = formatName m nextId
-    updateCounter nextId
-    updateSubs newSymbolName
-    return newSymbolName
+    symbolName <- liftA2 formatName getCurrentModule generateNewId
+    updateSubs symbolName $> symbolName
     where
-      generateNewId = maybe 1 (+ 1) . (Map.!? name) . view state_symbolCounter
       formatName (Just m) id' = m ++ "." ++ name ++ "_$" ++ show id'
       formatName Nothing  id' = name ++ "_$" ++ show id'
+
+      generateNewId = do
+        let getNextId = maybe 1 (+ 1) . (Map.!? name)
+        id' <- getNextId . view state_symbolCounter <$> getState
+        updateCounter id'
+        return id'
+
       updateCounter nextId =
         updateState $ over state_symbolCounter (Map.insert name nextId)
       updateSubs sub = updateState $ over state_substitutions ((name, sub) :)

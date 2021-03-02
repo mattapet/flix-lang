@@ -5,53 +5,61 @@
 
 module Core.Interpreter
   ( eval
+  , evalM
   ) where
 
 import           Control.Applicative            ( (<|>)
                                                 , Alternative(..)
                                                 , liftA2
                                                 )
+import           Control.Monad.ExceptT
 import           Control.Monad.Extra            ( bind2 )
 import           Control.Monad.StateT
 import           Core.Expr
 import           Data.Functor                   ( ($>) )
+import           Data.Functor.Identity
 import qualified Data.Map                      as Map
 import           Data.Maybe                     ( fromMaybe )
 import           Data.Types
 
 eval :: Environment -> Expr -> Either String (Value, Environment)
-eval env = flip runStateT env . runResult . eval'
+eval env = runIdentity . runExceptT . flip runStateT env . runResult . eval'
 
-newtype Result a = Result { runResult :: StateT Environment (Either String) a }
+evalM :: (Monad m)
+      => Environment
+      -> Expr
+      -> m (Either String (Value, Environment))
+evalM env = runExceptT . flip runStateT env . runResult . eval'
+
+newtype ResultT m a = ResultT { runResult :: StateT Environment (ExceptT String m) a }
   deriving (Monad, Applicative, Functor)
 
-instance MonadFail Result where
-  fail = Result . liftStateM . Left
+instance (Monad m) => MonadFail (ResultT m) where
+  fail = ResultT . liftStateM . liftExceptT . Left
 
-instance Alternative Result where
+instance (Monad m) => Alternative (ResultT m) where
   empty = fail ""
-  Result x <|> Result y = Result $ StateT $ \s -> case runStateT x s of
-    val@Right{} -> val
-    Left _      -> runStateT y s
+  ResultT x <|> ResultT y =
+    ResultT $ StateT $ \s -> runStateT x s <|> runStateT y s
 
-getEnv :: Result Environment
-getEnv = Result get
+getEnv :: (Monad m) => ResultT m Environment
+getEnv = ResultT get
 
-setEnv :: Environment -> Result ()
-setEnv = Result . put
+setEnv :: (Monad m) => Environment -> ResultT m ()
+setEnv = ResultT . put
 
-getScope :: Result Scope
+getScope :: (Monad m) => ResultT m Scope
 getScope = env_scope <$> getEnv
 
-setScope :: Scope -> Result ()
+setScope :: (Monad m) => Scope -> ResultT m ()
 setScope s = getEnv >>= setEnv . Environment s . env_constr
 
-getConstructors :: Result Constructors
+getConstructors :: (Monad m) => ResultT m Constructors
 getConstructors = env_constr <$> getEnv
 
 -- Evaluation
 
-eval' :: Expr -> Result Value
+eval' :: (Monad m) => Expr -> ResultT m Value
 eval' (Lit x       ) = return $ LitV x
 eval' (Var x       ) = liftA2 bindType (lookupType x) (lookupVariable x)
 eval' (Lam arg body) = do
@@ -73,8 +81,8 @@ eval' (Case value patterns) = pushFrame $ do
 
 -- Lambda applications
 
-apply :: Value -> Value -> Result Value
-apply (BuiltinV _ fn            ) value = Result $ liftStateM $ fn value
+apply :: (Monad m) => Value -> Value -> ResultT m Value
+apply (BuiltinV _ fn) value = ResultT $ liftStateM $ liftExceptT $ fn value
 apply (LambdaV ty scope arg body) value = pushFrame $ switchContext scope $ do
   bindValue arg value
   applyType ty <$> eval' body
@@ -86,13 +94,13 @@ applyType _          v                 = v
 
 -- Pattern matching
 
-patternMatch :: [PatternCase] -> Value -> Result (Maybe Expr)
+patternMatch :: (Monad m) => [PatternCase] -> Value -> ResultT m (Maybe Expr)
 patternMatch []       _     = return Nothing
 patternMatch (x : xs) value = do
   liftA2 (<|>) (tryMatch x value) (patternMatch xs value)
   where tryMatch x' = (<|> return Nothing) . patternMatch' x'
 
-patternMatch' :: PatternCase -> Value -> Result (Maybe Expr)
+patternMatch' :: (Monad m) => PatternCase -> Value -> ResultT m (Maybe Expr)
 patternMatch' (DefaultP, result) _ = return $ Just result
 -- Matching literals
 patternMatch' (LitP x, result) (LitV y) | x == y    = return $ Just result
@@ -136,39 +144,39 @@ patternMatch' (ConstrP ty ptrns, result) value@(LambdaV ty' _ _ _) =
 -- Unrecognized pattern
 patternMatch' _ _ = return Nothing
 
-lookupVariable :: Name -> Result Value
+lookupVariable :: (Monad m) => Name -> ResultT m Value
 lookupVariable x = getScope >>= unpack . (Map.!? x)
   where
     unpack (Just v) = return v
     unpack Nothing  = fail $ "Unbound variable '" ++ x ++ "'"
 
-lookupType :: Name -> Result Ty
+lookupType :: (Monad m) => Name -> ResultT m Ty
 lookupType x = fromMaybe AnyTy . (Map.!? x) <$> getConstructors
 
-bindValue :: Name -> Value -> Result ()
+bindValue :: (Monad m) => Name -> Value -> ResultT m ()
 bindValue name value = getScope >>= setScope . Map.insert name value
 
 bindType :: Ty -> Value -> Value
 bindType ty (LambdaV AnyTy s n c) = LambdaV ty s n c
 bindType _  v                     = v
 
-pushFrame :: Result a -> Result a
+pushFrame :: (Monad m) => ResultT m a -> ResultT m a
 pushFrame f = do
   env    <- getEnv
   result <- f
   setEnv env $> result
 
-switchContext :: Scope -> Result a -> Result a
+switchContext :: (Monad m) => Scope -> ResultT m a -> ResultT m a
 switchContext env f = pushFrame $ do
   baseScope <- getScope
   setScope (env <> baseScope) >> f
 
 -- Tuple helpers
 
-first :: Int -> Value -> Result Value
+first :: (Monad m) => Int -> Value -> ResultT m Value
 first n v = eval' (select' 1 n) >>= apply v
 
-dropFirst :: Int -> Value -> Result Value
+dropFirst :: (Monad m) => Int -> Value -> ResultT m Value
 dropFirst n v = eval' (drop' 1 n) >>= apply v
 
 select' :: Int -> Int -> Expr
