@@ -49,6 +49,7 @@ spec = do
             )
           , ("[1, 2]"     , ListLiteral [NumberLiteral 1, NumberLiteral 2])
           , ("(+)"        , OperatorCapture "+")
+          , ("def x = 2"  , Def "x" [([], NumberLiteral 2)])
           , ("let x = 2"  , LetMatch "x" [([], NumberLiteral 2)])
           , ("let f a = a", LetMatch "f" [([Identifier "a"], Identifier "a")])
           , ("{ 2 }"      , Block [NumberLiteral 2])
@@ -61,6 +62,14 @@ spec = do
               "==="
               ["xs", "ys"]
               (Call (Identifier "equals") [Identifier "xs", Identifier "ys"])
+            )
+          , ( "def (===) xs ys = equals xs ys"
+            , Def
+              "==="
+              [ ( [Identifier "xs", Identifier "ys"]
+                , Call (Identifier "equals") [Identifier "xs", Identifier "ys"]
+                )
+              ]
             )
           , ( "{\n\
             \  let x = 2\n\
@@ -230,6 +239,16 @@ spec = do
               , ( "let x (1, 2) = 3 \n\
               \        x  _     = -1"
                 , LetMatch
+                  "x"
+                  [ ( [Tuple [NumberLiteral 1, NumberLiteral 2]]
+                    , NumberLiteral 3
+                    )
+                  , ([Underscore], NumberLiteral (-1))
+                  ]
+                )
+              , ( "def x (1, 2) = 3 \n\
+              \    def x  _     = -1"
+                , Def
                   "x"
                   [ ( [Tuple [NumberLiteral 1, NumberLiteral 2]]
                     , NumberLiteral 3

@@ -9,6 +9,7 @@ module Flix.Parser
 import           Control.Applicative            ( liftA2
                                                 , liftA3
                                                 )
+import           Control.Monad                  ( guard )
 import           Control.Monad.Extra            ( bind2 )
 import           Data.Char                      ( isUpper )
 import           Data.Functor                   ( ($>) )
@@ -206,10 +207,25 @@ let' = letKw *> (letOperator <|> letMatch)
   where
     letKw = spaces *> string "let" <* notFollowedBy identifierChar <* spaces
 
+def :: Parsec String u Expr
+def = do
+  (name, case') <- liftA2 (,) go_decl go_matchCase
+  cases         <- many $ try (go_nextDecl name *> go_matchCase)
+  return $ Def name (case' : cases)
+  where
+    go_decl = defKw *> (identifier <|> parens' operator)
+    go_nextDecl name = go_decl >>= guard . (name ==)
+
+    go_args = many atom <* char '=' <* notFollowedBy operatorChar
+    go_matchCase = liftA2 (,) go_args expr
+
+    defKw = spaces *> string "def" <* notFollowedBy identifierChar <* spaces
+    parens' p = spaces *> char '(' *> p <* char ')' <* spaces
+
 expr :: Parsec String u Expr
 expr =
   anySpaces
-    *> (try let' <|> try matchExpr <|> try ifExpr <|> try term)
+    *> (try def <|> try let' <|> try matchExpr <|> try ifExpr <|> try term)
     <* anySpaces
 
 -- Declarations
