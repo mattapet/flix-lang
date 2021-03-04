@@ -25,11 +25,26 @@ spec = do
       let out = LitV (Int 3)
       show <$> run in' `shouldBe` Right (show out)
 
+    it "determines odd-ity of the number" $ do
+      let
+        in'
+          = " module TestModule \n\
+            \                                                              \n\
+            \ def isOdd n  = if n == 1 then true else not (isEven (n - 2)) \n\
+            \ def isEven n = if n == 0 then true else not  (isOdd (n - 2)) \n\
+            \                                                              \n\
+            \ def not true = false                                         \n\
+            \ def not false = true                                         \n\
+            \                                                              \n\
+            \ isOdd 17"
+      let out = LitV (Bool True)
+      show <$> run in' `shouldBe` Right (show out)
+
     it "runs value through an identity function" $ do
       let
         in'
           = " module TestModule \n\
-            \ let id a = a      \n\
+            \ def id a = a      \n\
             \ id 2"
       let out = LitV (Int 2)
       show <$> run in' `shouldBe` Right (show out)
@@ -39,7 +54,7 @@ spec = do
       let
         in'
           = " module TestModule                             \n\
-            \ let factorial n =                             \n\
+            \ def factorial n =                             \n\
             \   if n < 2 then 1 else n * (factorial (n - 1))\n\
             \ factorial 5"
       let out = LitV (Int 120)
@@ -49,7 +64,7 @@ spec = do
       let
         in'
           = " module TestModule                         \n\
-            \ let fib n =                               \n\
+            \ def fib n =                               \n\
             \   if n <= 2 then 1                        \n\
             \             else fib (n - 1) + fib (n - 2)\n\
             \ fib 10"
@@ -62,7 +77,7 @@ spec = do
       let
         in'
           = " module TestModule            \n\
-            \ let flip f = { x y => f y x }\n\
+            \ def flip f = { x y => f y x }\n\
             \ (flip (-)) 5 10"
       let out = LitV (Int 5)
       show <$> run in' `shouldBe` Right (show out)
@@ -135,12 +150,12 @@ spec = do
             \ record (:) head tail                \n\
             \ record Nil                          \n\
             \                                     \n\
-            \ let head x = (x)                    \n\
-            \ let tail x = match x {              \n\
+            \ def head x = (x)                    \n\
+            \ def tail x = match x {              \n\
             \   case () => ()                     \n\
             \   case (_:tail) => tail             \n\
             \ }                                   \n\
-            \ let length xs = match xs {          \n\
+            \ def length xs = match xs {          \n\
             \    case () => 0                     \n\
             \    case (_:tail) => 1 + length tail \n\
             \ }                                   \n\
@@ -152,8 +167,8 @@ spec = do
       let
         in'
           = " module TestModule                   \n\
-            \ let null () = true                  \n\
-            \     null _  = false                 \n\
+            \ def null () = true                  \n\
+            \ def null _  = false                 \n\
             \                                     \n\
             \ let xs = (1, (2, ()))               \n\
             \ null xs"
@@ -164,8 +179,8 @@ spec = do
       let
         in'
           = " module TestModule                   \n\
-            \ let null () = true                  \n\
-            \     null _  = false                 \n\
+            \ def null () = true                  \n\
+            \ def null _  = false                 \n\
             \                                     \n\
             \ let xs = ()                         \n\
             \ null xs                             "
@@ -176,10 +191,10 @@ spec = do
       let
         in'
           = " module TestModule                   \n\
-            \ let equals () () = true             \n\
-            \     equals () _  = false            \n\
-            \     equals _  () = false            \n\
-            \     equals (x, xs) (y, ys) =        \n\
+            \ def equals () () = true             \n\
+            \ def equals () _  = false            \n\
+            \ def equals _  () = false            \n\
+            \ def equals (x, xs) (y, ys) =        \n\
             \       if x == y then xs `equals` ys \n\
             \                 else false          \n\
             \                                     \n\
@@ -193,10 +208,10 @@ spec = do
       let
         in'
           = " module TestModule                   \n\
-            \ let equals () () = true             \n\
-            \     equals () _  = false            \n\
-            \     equals _  () = false            \n\
-            \     equals (x, xs)  (y, ys) =       \n\
+            \ def equals () () = true             \n\
+            \ def equals () _  = false            \n\
+            \ def equals _  () = false            \n\
+            \ def equals (x, xs)  (y, ys) =       \n\
             \       if x == y then xs `equals` ys \n\
             \                 else false          \n\
             \                                     \n\
@@ -212,10 +227,10 @@ spec = do
           = " module TestModule                   \n\
             \ record (:) head tail                \n\
             \                                     \n\
-            \ let equals () () = true             \n\
-            \     equals () _  = false            \n\
-            \     equals _  () = false            \n\
-            \     equals (x : xs) (y : ys) =      \n\
+            \ def equals () () = true             \n\
+            \ def equals () _  = false            \n\
+            \ def equals _  () = false            \n\
+            \ def equals (x : xs) (y : ys) =      \n\
             \       if x == y then xs `equals` ys \n\
             \                 else false          \n\
             \                                     \n\
@@ -228,18 +243,16 @@ spec = do
     it "defines a list equality as operator ===" $ do
       let
         in'
-          = " module TestModule                   \n\
-            \ let (===) xs ys = match (xs, ys) {  \n\
-            \     case ((), ()) => true           \n\
-            \     case ((), _)  => false          \n\
-            \     case (_,  ()) => false          \n\
-            \     case ((x, xs), (y, ys)) =>      \n\
-            \       if x == y then xs === ys      \n\
-            \                 else false          \n\
-            \    }                                \n\
-            \ let xs = (1, (2, ()))               \n\
-            \ let ys = (1, (2, (3, ())))          \n\
-            \ xs === ys                           "
+          = " module TestModule                \n\
+            \ def (===) () () = true           \n\
+            \ def (===) () _  = false          \n\
+            \ def (===) _  () = false          \n\
+            \ def (===) (x, xs) (y, ys) =      \n\
+            \       if x == y then xs === ys   \n\
+            \                 else false       \n\
+            \ let xs = (1, (2, ()))            \n\
+            \ let ys = (1, (2, (3, ())))       \n\
+            \ xs === ys                        "
       let out = LitV (Bool False)
       show <$> run in' `shouldBe` Right (show out)
 
@@ -279,10 +292,8 @@ spec = do
           \   record Nil                  \n\
           \                               \n\
           \   let xs = 1 : 5 : Nil        \n\
-          \                               \n\ 
-          \   match xs {                  \n\
-          \     case (x:_) => x           \n\
-          \   }                           \n\
+          \   let (x:_) = xs              \n\
+          \   x                           \n\
           \"
       let out = LitV $ Int 1
       show <$> run in' `shouldBe` Right (show out)
@@ -326,8 +337,8 @@ spec = do
           \   record (:) head tail         \n\
           \   record Nil                   \n\
           \                                \n\
-          \   let foldr f b Nil = b        \n\
-          \       foldr f b (x : xs) =     \n\
+          \   def foldr f b Nil = b        \n\
+          \   def foldr f b (x : xs) =     \n\
           \             f (foldr f b xs) x \n\
           \                                \n\
           \   foldr (+) 0 [1, 2, 3]        \n\

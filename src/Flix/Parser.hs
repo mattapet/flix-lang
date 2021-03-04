@@ -184,28 +184,11 @@ matchExpr = liftA2 Match value cases
                       (anySpaces *> string "case" *> atom)
                       (string "=>" *> spaces *> expr)
 
-letMatch :: Parsec String u Expr
-letMatch = do
-  name         <- identifier
-  (args, body) <- matchCase
-  cases        <- many $ try (string name *> matchCase)
-  return $ LetMatch name ((args, body) : cases)
-  where
-    args'     = many atom <* char '=' <* notFollowedBy operatorChar
-    matchCase = liftA2 (,) args' expr
-
-letOperator :: Parsec String u Expr
-letOperator = liftA3 Let name args body
-  where
-    name = parens' operator
-    args = many identifier <* char '=' <* notFollowedBy operatorChar
-    body = expr
-    parens' p = spaces *> char '(' *> p <* char ')' <* spaces
-
 let' :: Parsec String u Expr
-let' = letKw *> (letOperator <|> letMatch)
+let' = liftA2 Let go_decl expr
   where
-    letKw = spaces *> string "let" <* notFollowedBy identifierChar <* spaces
+    go_decl = letKw *> atom <* char '=' <* notFollowedBy operatorChar
+    letKw   = spaces *> string "let" <* notFollowedBy identifierChar <* spaces
 
 def :: Parsec String u Expr
 def = do

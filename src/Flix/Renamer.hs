@@ -44,13 +44,18 @@ renameExpr (BinOp op lhs rhs) =
 renameExpr (Call callee args) =
   liftA2 Call (renameExpr callee) (traverse renameExpr args)
 
-renameExpr (Let name args body) = do
-  name' <- introduceVariable name -- Introduce new name of the current level
-  pushFrame $ liftA2 (Let name') (introduceVariables args) (renameExpr body)
+renameExpr (Let arg body) = do
+  body' <- renameExpr body
+  _     <- introduceVariables $ foldMap go_collectVars [arg]
+  arg'  <- renameExpr arg
+  return $ Let arg' body'
+  where
+    go_collectVars (Identifier x) = [x]
+    go_collectVars (Tuple      t) = foldMap go_collectVars t
+    go_collectVars _              = []
 
-renameExpr (LetMatch name cases) = do
-  name' <- introduceVariable name -- Introduce new name of the current level
-  LetMatch name' <$> traverse renameCaseLet cases
+renameExpr (Def name cases) =
+  liftA2 Def (renameName name) (traverse renameCaseDef cases)
 
 renameExpr (If cond then' else') =
   liftA3 If (renameExpr cond) (renameExpr then') (renameExpr else')
@@ -58,7 +63,12 @@ renameExpr (If cond then' else') =
 renameExpr (Lambda args body) =
   pushFrame $ liftA2 Lambda (introduceVariables args) (renameExpr body)
 
-renameExpr (Block exprs) = pushFrame $ Block <$> traverse renameExpr exprs
+renameExpr (Block exprs) = pushFrame $ do
+  _ <- introduceVariables $ foldMap go_collectDefName exprs
+  Block <$> traverse renameExpr exprs
+  where
+    go_collectDefName (Def name _) = [name]
+    go_collectDefName _            = []
 
 renameExpr (Match value caseExprs) =
   liftA2 Match (renameExpr value) (traverse renameCaseExpr caseExprs)
@@ -66,8 +76,8 @@ renameExpr (Match value caseExprs) =
 renameName :: Renaming m => Name -> m Name
 renameName = lookupSymbolAlias
 
-renameCaseLet :: Renaming m => ([Expr], Expr) -> m ([Expr], Expr)
-renameCaseLet (args, body) = pushFrame $ do
+renameCaseDef :: Renaming m => ([Expr], Expr) -> m ([Expr], Expr)
+renameCaseDef (args, body) = pushFrame $ do
   _ <- introduceVariables $ foldMap collect_vars args
   liftA2 (,) (traverse renameExpr args) (renameExpr body)
   where
@@ -88,8 +98,12 @@ renameCaseExpr (pattern, value) = pushFrame $ do
 
 renameDecl :: Renaming m => Decl -> m Decl
 renameDecl (Module name contents) = do
-  registerModule name
+  _ <- registerModule name
+  _ <- introduceVariables $ foldMap go_collectDefNames contents
   Module name <$> traverse rename contents
+  where
+    go_collectDefNames (Expr (Def name' _)) = [name']
+    go_collectDefNames _                    = []
 
 renameDecl (Record name fields) =
   liftA2 Record (introduceVariable name) (introduceVariables fields)

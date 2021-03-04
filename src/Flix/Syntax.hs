@@ -6,6 +6,10 @@ type FieldName = String
 
 type CaseExpr = (Expr, Expr)
 
+type Arg = Expr
+type Args = [Arg]
+type Body = Expr
+
 data Expr =
     Underscore
   | BoolLiteral Bool
@@ -19,9 +23,8 @@ data Expr =
   | BinOp OpName Expr Expr
   | OperatorCapture OpName
   | Tuple [Expr]
-  | Let Name [Name] Expr
-  | LetMatch Name [([Expr], Expr)]
-  | Def Name [([Expr], Expr)]
+  | Let Arg Expr
+  | Def Name [(Args, Body)]
   | If Expr Expr Expr
   | Block [Expr]
   | Match Expr [CaseExpr]

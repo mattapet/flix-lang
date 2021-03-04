@@ -50,19 +50,12 @@ spec = do
           , ("[1, 2]"     , ListLiteral [NumberLiteral 1, NumberLiteral 2])
           , ("(+)"        , OperatorCapture "+")
           , ("def x = 2"  , Def "x" [([], NumberLiteral 2)])
-          , ("let x = 2"  , LetMatch "x" [([], NumberLiteral 2)])
-          , ("let f a = a", LetMatch "f" [([Identifier "a"], Identifier "a")])
+          , ("def f a = a", Def "f" [([Identifier "a"], Identifier "a")])
           , ("{ 2 }"      , Block [NumberLiteral 2])
-          , ( "let f a = { a }"
-            , LetMatch "f" [([Identifier "a"], Block [Identifier "a"])]
+          , ( "def f a = { a }"
+            , Def "f" [([Identifier "a"], Block [Identifier "a"])]
             )
-          , ("let (++) = concat", Let "++" [] (Identifier "concat"))
-          , ( "let (===) xs ys = equals xs ys"
-            , Let
-              "==="
-              ["xs", "ys"]
-              (Call (Identifier "equals") [Identifier "xs", Identifier "ys"])
-            )
+          , ("def (++) = concat", Def "++" [([], Identifier "concat")])
           , ( "def (===) xs ys = equals xs ys"
             , Def
               "==="
@@ -75,7 +68,7 @@ spec = do
             \  let x = 2\n\
             \  x\n\
             \}"
-            , Block [LetMatch "x" [([], NumberLiteral 2)], Identifier "x"]
+            , Block [Let (Identifier "x") (NumberLiteral 2), Identifier "x"]
             )
           , ( "if true then 1 else 2"
             , If (BoolLiteral True) (NumberLiteral 1) (NumberLiteral 2)
@@ -94,14 +87,14 @@ spec = do
               \  x + y\n\
               \}"
             , Block
-              [ LetMatch "x" [([], NumberLiteral 2)]
-              , LetMatch "y" [([], NumberLiteral 4)]
+              [ Let (Identifier "x") (NumberLiteral 2)
+              , Let (Identifier "y") (NumberLiteral 4)
               , BinOp "+" (Identifier "x") (Identifier "y")
               ]
             )
-          , ("let id a = a", LetMatch "id" [([Identifier "a"], Identifier "a")])
-          , ( "let factorial n = if n < 1 then 1 else n * factorial (n - 1)"
-            , LetMatch
+          , ("def id a = a", Def "id" [([Identifier "a"], Identifier "a")])
+          , ( "def factorial n = if n < 1 then 1 else n * factorial (n - 1)"
+            , Def
               "factorial"
               [ ( [Identifier "n"]
                 , If
@@ -117,17 +110,17 @@ spec = do
                 )
               ]
             )
-          , ( "let factorial n = {\n\
-            \  let factorial' n acc = if n < 1\n\
+          , ( "def factorial n = {\n\
+            \  def factorial' n acc = if n < 1\n\
             \    then 1\n\
             \    else factorial' (n - 1) (n * acc)\n\
             \  factorial' n 1\n\
             \}"
-            , LetMatch
+            , Def
               "factorial"
               [ ( [Identifier "n"]
                 , Block
-                  [ LetMatch
+                  [ Def
                     "factorial'"
                     [ ( [Identifier "n", Identifier "acc"]
                       , If
@@ -176,7 +169,7 @@ spec = do
                 (Identifier "x")
                 [ ( BoolLiteral True
                   , Block
-                    [LetMatch "x" [([], NumberLiteral 123)], Identifier "x"]
+                    [Let (Identifier "x") (NumberLiteral 123), Identifier "x"]
                   )
                 , (Underscore, NumberLiteral 0)
                 ]
@@ -210,9 +203,8 @@ spec = do
               , Lambda
                 ["x", "y"]
                 (Block
-                  [ LetMatch
-                    "sum"
-                    [([], BinOp "+" (Identifier "x") (Identifier "y"))]
+                  [ Let (Identifier "sum")
+                        (BinOp "+" (Identifier "x") (Identifier "y"))
                   , Identifier "sum"
                   ]
                 )
@@ -233,20 +225,9 @@ spec = do
             let result = BinOp op (Identifier "x") (Identifier "y")
             parse (printf "x %s y" op) `shouldBe` Right (Expr result)
 
-      describe "pattern matching let expressions" $ do
+      describe "pattern matching definition expressions" $ do
         let testSuite =
-              [ ("let x () = 0", LetMatch "x" [([Tuple []], NumberLiteral 0)])
-              , ( "let x (1, 2) = 3 \n\
-              \        x  _     = -1"
-                , LetMatch
-                  "x"
-                  [ ( [Tuple [NumberLiteral 1, NumberLiteral 2]]
-                    , NumberLiteral 3
-                    )
-                  , ([Underscore], NumberLiteral (-1))
-                  ]
-                )
-              , ( "def x (1, 2) = 3 \n\
+              [ ( "def x (1, 2) = 3 \n\
               \    def x  _     = -1"
                 , Def
                   "x"
@@ -265,7 +246,8 @@ spec = do
     let testSuite =
           [ ("module TestModule", Module "TestModule" [])
           , ( "module TestModule\nlet x = 1"
-            , Module "TestModule" [Expr $ LetMatch "x" [([], NumberLiteral 1)]]
+            , Module "TestModule"
+                     [Expr $ Let (Identifier "x") (NumberLiteral 1)]
             )
           , ("record Nil"           , Record "Nil" [])
           , ("record Cons head tail", Record "Cons" ["head", "tail"])

@@ -40,6 +40,7 @@ desugarExpr (Tuple           fields) = do
   fields' <- traverse desugarExpr fields
   return $ Lam nextId' (mkApps (Var nextId') fields')
 
+desugarExpr (Lambda []       body) = desugarExpr body
 desugarExpr (Lambda [arg   ] body) = Lam arg <$> desugarExpr body
 desugarExpr (Lambda (x : xs) body) = Lam x <$> desugarExpr (Lambda xs body)
 
@@ -49,13 +50,13 @@ desugarExpr (Call callee args) =
   liftA2 mkApps (desugarExpr callee) (traverse desugarExpr args)
 
 -- Maybe an error here???
-desugarExpr (Let n args body) = do
-  body' <- desugarExpr body
+desugarExpr (Def name cases) = do
+  (args, body) <- simplifyDef cases
+  body'        <- desugarExpr body
   let fn = foldr Lam body' args
   id' <- generateUniqueName
-  return $ Lam id' (Bind (n, fn) (Var id'))
+  return $ Lam id' (Bind (name, fn) (Var id'))
 
-desugarExpr (LetMatch n cases   ) = simplifyLetMatch n cases >>= desugarExpr
 desugarExpr (Block xs           ) = desugarBlockExprs xs
 
 desugarExpr (If cond then' else') = do
@@ -86,25 +87,25 @@ desugarExpr (Match value cases) = do
 
     go_constrTy = lookupConstructor
 
+desugarExpr Underscore = undefined
+desugarExpr Let{}      = undefined
 
-desugarExpr _ = undefined
-
-simplifyLetMatch :: (Context m) => Name -> [([Expr], Expr)] -> m Expr
-simplifyLetMatch n cases@[(args, body)] = case collect_argNames args of
-  -- Return simple let expression if arguments do not contain any patterns
-  Just args' -> return $ Let n args' body
-  Nothing    -> translateToCaseExpr n cases
+simplifyDef :: (Context m) => [([Expr], Expr)] -> m ([Name], Expr)
+simplifyDef cases@[(args, body)] = case collect_argNames args of
+  -- Return simple def expression if arguments do not contain any patterns
+  Just args' -> return (args', body)
+  Nothing    -> translateToCaseExpr' cases
   where
     collect_argNames = traverse collect_argName
     collect_argName (Identifier x) = Just x
     collect_argName _              = Nothing
-simplifyLetMatch n cases = translateToCaseExpr n cases
+simplifyDef cases = translateToCaseExpr' cases
 
-translateToCaseExpr :: (Context m) => Name -> [([Expr], Expr)] -> m Expr
-translateToCaseExpr n cases = all_same_length cases >> do
+translateToCaseExpr' :: (Context m) => [([Expr], Expr)] -> m ([Name], Expr)
+translateToCaseExpr' cases = all_same_length cases >> do
   args <- get_args
   let body' = Match (go_args args) (go_casePatterns cases)
-  return $ Let n args body'
+  return (args, body')
 
   where
     get_args = traverse (const generateUniqueName) [1 .. get_argLen cases]
@@ -134,11 +135,14 @@ desugarDecl' (Module _ body) = concat <$> traverse go_body body
 desugarDecl' (Record constr fields) =
   bindConstructor constr go_constrTy >> (constructor :) <$> accessors
   where
-    constructor = Let constr fields (Tuple (Identifier <$> fields))
-    accessors   = traverse generateAccessor fields
+    constructor =
+      Def constr [(Identifier <$> fields, Tuple (Identifier <$> fields))]
+    accessors = traverse generateAccessor fields
     generateAccessor name = do
       arg <- generateUniqueName
-      return $ Let name [arg] (Identifier arg `Call` [fieldExtractor name])
+      return $ Def
+        name
+        [([Identifier arg], Identifier arg `Call` [fieldExtractor name])]
     fieldExtractor = Lambda fields . Identifier
     go_constrTy    = foldr (:~>) (NominalTy constr) (AnyTy <$ fields)
 
@@ -150,21 +154,53 @@ desugarListLiteralExpr xs = do
   desugarExpr $ foldr (BinOp cons) (Identifier nil) xs
 
 desugarBlockExprs :: (Context m) => [Expr] -> m CoreExpr
-desugarBlockExprs []                        = fail "Unexpected empty block"
-desugarBlockExprs [Let{}] = fail "Illegal binding at the end of the block"
-desugarBlockExprs [x                      ] = desugarExpr x
-desugarBlockExprs (Let name args body : xs) = do
-  fn      <- mkLams args <$> desugarExpr body
-  context <- desugarBlockExprs xs
-  return $ (name, fn) `Bind` context
+desugarBlockExprs es = do
+  defs    <- traverse go_def $ foldMap go_collectDefs es
+  content <- desugarBlockExprs' $ foldMap go_collectExprs es
+  return $ foldr ($) content defs
+  where
+    go_def (name, cases) = do
+      (args, body) <- simplifyDef cases
+      body'        <- desugarExpr body
+      return $ Bind (name, mkLams args body')
 
-desugarBlockExprs (LetMatch n cs : xs) =
-  simplifyLetMatch n cs >>= desugarBlockExprs . (: xs)
+    go_collectDefs (Def name cases) = [(name, cases)]
+    go_collectDefs _                = []
 
--- Wrap side-effect-y expression withing a noop lambda application that ignores
--- its argument
-desugarBlockExprs (x : xs) = do
-  sideEffect  <- desugarExpr x
-  context     <- desugarBlockExprs xs
-  throwawayId <- generateUniqueName
-  return $ (throwawayId, sideEffect) `Bind` context
+    go_collectExprs Def{} = []
+    go_collectExprs e     = [e]
+
+    desugarBlockExprs' [] = fail "Unexpected empty block"
+    desugarBlockExprs' [Let{}] = fail "Illegal binding at the end of the block"
+    desugarBlockExprs' [x] = desugarExpr x
+    desugarBlockExprs' (Let (Identifier arg) body : xs) = do
+      body'   <- desugarExpr body
+      context <- desugarBlockExprs' xs
+      return $ (arg, body') `Bind` context
+
+    desugarBlockExprs' (Let arg body : xs) = do
+      body'   <- desugarExpr body
+      context <- desugarBlockExprs' xs
+      arg'    <- go_casePattern arg
+      return $ Case body' [(arg', context)]
+      where
+        go_casePattern Underscore          = return DefaultP
+        go_casePattern (BoolLiteral   x  ) = return $ LitP $ Bool x
+        go_casePattern (NumberLiteral x  ) = return $ LitP $ Int x
+        go_casePattern (Identifier    x  ) = return $ VarP x
+        go_casePattern (Constructor   x  ) = flip ConstrP [] <$> go_constrTy x
+        go_casePattern (Tuple es') = TupleP <$> traverse go_casePattern es'
+        go_casePattern (Call (Identifier constr) es') =
+          liftA2 ConstrP (go_constrTy constr) (traverse go_casePattern es')
+        go_casePattern (BinOp op lhs rhs) =
+          liftA2 ConstrP (go_constrTy op) (traverse go_casePattern [lhs, rhs])
+        go_casePattern e =
+          fail $ "Unsupported pattern match expr '" ++ show e ++ "'"
+
+        go_constrTy = lookupConstructor
+
+    desugarBlockExprs' (x : xs) = do
+      sideEffect  <- desugarExpr x
+      context     <- desugarBlockExprs xs
+      throwawayId <- generateUniqueName
+      return $ (throwawayId, sideEffect) `Bind` context
