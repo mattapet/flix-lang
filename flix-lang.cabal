@@ -38,10 +38,12 @@ library
       Flix.Capabilities
       Flix.Compiler
       Flix.Desugar
+      Flix.Desugar.Errors
       Flix.FlixMonad
       Flix.FlixState
       Flix.Parser
       Flix.Renamer
+      Flix.Renamer.Errors
       Flix.Syntax
       Lib
   other-modules:

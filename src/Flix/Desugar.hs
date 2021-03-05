@@ -11,6 +11,7 @@ import           Core                    hiding ( Expr )
 import           Data.Bifunctor                 ( first )
 import           Data.Types
 import           Flix.Capabilities
+import           Flix.Desugar.Errors
 import           Flix.Syntax
 
 type Context m
@@ -133,7 +134,7 @@ translateToCaseExpr' cases = all_same_length cases >> do
     all_same_length [] = return []
     all_same_length (x : xs)
       | all (\y -> length x == length y) xs = all_same_length xs
-      | otherwise = fail "Let bindings with different amount of arguments"
+      | otherwise                           = fail defNumberOfArgumentsError
 
 -- Helper functions
 
@@ -159,9 +160,9 @@ desugarBlockExprs es = do
     go_collectExprs Def{} = []
     go_collectExprs e     = [e]
 
-    desugarBlockExprs' [] = fail "Unexpected empty block"
-    desugarBlockExprs' [Let{}] = fail "Illegal binding at the end of the block"
-    desugarBlockExprs' [x] = desugarExpr x
+    desugarBlockExprs' []                               = fail emptyBlockError
+    desugarBlockExprs' [Let{}] = fail letAtEndOfBlockError
+    desugarBlockExprs' [x                             ] = desugarExpr x
     desugarBlockExprs' (Let (Identifier arg) body : xs) = do
       body'   <- desugarExpr body
       context <- desugarBlockExprs' xs
@@ -190,5 +191,4 @@ desugarCasePattern (Call (Identifier constr) es') =
   liftA2 ConstrP (lookupConstructor constr) (traverse desugarCasePattern es')
 desugarCasePattern (BinOp op lhs rhs) =
   liftA2 ConstrP (lookupConstructor op) (traverse desugarCasePattern [lhs, rhs])
-desugarCasePattern e =
-  fail $ "Unsupported pattern match expr '" ++ show e ++ "'"
+desugarCasePattern e = fail $ unsupportedPatternMatchExprError e
