@@ -216,9 +216,15 @@ spec = do
             "TestModule"
             [Expr $ Let (Identifier "TestModule.x_$1") (NumberLiteral 1)]
           )
-        , (Record "Nil" [], Record "Nil_$1" [])
-        , ( Record "Cons"    ["head", "tail"]
-          , Record "Cons_$1" ["head_$1", "tail_$1"]
+        , ( Module "TestModule" [Decl $ Record "Nil" []]
+          , Module "TestModule" [Decl $ Record "TestModule.Nil_$1" []]
+          )
+        , ( Module "TestModule" [Decl $ Record "Cons" ["head", "tail"]]
+          , Module
+            "TestModule"
+            [ Decl $ Record "TestModule.Cons_$1"
+                            ["TestModule.head_$1", "TestModule.tail_$1"]
+            ]
           )
         , ( Module
             "TestModule"

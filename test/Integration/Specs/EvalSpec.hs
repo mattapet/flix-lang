@@ -150,11 +150,6 @@ spec = do
             \ record (:) head tail                \n\
             \ record Nil                          \n\
             \                                     \n\
-            \ def head x = (x)                    \n\
-            \ def tail x = match x {              \n\
-            \   case () => ()                     \n\
-            \   case (_:tail) => tail             \n\
-            \ }                                   \n\
             \ def length xs = match xs {          \n\
             \    case () => 0                     \n\
             \    case (_:tail) => 1 + length tail \n\

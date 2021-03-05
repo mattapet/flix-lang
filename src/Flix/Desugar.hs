@@ -24,6 +24,35 @@ desugar :: (Context m) => AST -> m CoreExpr
 desugar (Expr e) = desugarExpr e
 desugar (Decl e) = desugarDecl e
 
+-- Declarations
+
+desugarDecl :: (Context m) => Decl -> m CoreExpr
+desugarDecl d = desugarDecl' d >>= desugarBlockExprs
+
+desugarDecl' :: (Context m) => Decl -> m [Expr]
+desugarDecl' (Module _ body) = concat <$> traverse go_body body
+  where
+    go_body (Decl d) = desugarDecl' d
+    go_body (Expr e) = return [e]
+
+desugarDecl' (Record constr fields) =
+  bindConstructor constr go_constrTy' >> liftA2 (:) constructor accessors
+  where
+    constructor = do
+      let args = Identifier <$> fields
+      let body = Tuple args
+      return $ Def constr [(args, body)]
+
+    accessors = traverse generateAccessor fields
+      where
+        generateAccessor name = do
+          arg <- generateUniqueName
+          let body = Identifier arg `Call` [fieldExtractor name]
+          return $ Def name [([Identifier arg], body)]
+        fieldExtractor = Lambda fields . Identifier
+
+    go_constrTy' = foldr (:~>) (NominalTy constr) (AnyTy <$ fields)
+
 -- Expressions
 
 desugarExpr :: (Context m) => Expr -> m CoreExpr
@@ -70,22 +99,7 @@ desugarExpr (Match value cases) = do
   liftA2 Case (desugarExpr value) (traverse desugarCaseExpr cases)
   where
     desugarCaseExpr (pattern, result) =
-      liftA2 (,) (go_casePattern pattern) (desugarExpr result)
-
-    go_casePattern Underscore         = return DefaultP
-    go_casePattern (BoolLiteral   x ) = return $ LitP $ Bool x
-    go_casePattern (NumberLiteral x ) = return $ LitP $ Int x
-    go_casePattern (Identifier    x ) = return $ VarP x
-    go_casePattern (Constructor   x ) = flip ConstrP [] <$> go_constrTy x
-    go_casePattern (Tuple         es) = TupleP <$> traverse go_casePattern es
-    go_casePattern (Call (Identifier constr) es) =
-      liftA2 ConstrP (go_constrTy constr) (traverse go_casePattern es)
-    go_casePattern (BinOp op lhs rhs) =
-      liftA2 ConstrP (go_constrTy op) (traverse go_casePattern [lhs, rhs])
-    go_casePattern e =
-      fail $ "Unsupported pattern match expr '" ++ show e ++ "'"
-
-    go_constrTy = lookupConstructor
+      liftA2 (,) (desugarCasePattern pattern) (desugarExpr result)
 
 desugarExpr Underscore = undefined
 desugarExpr Let{}      = undefined
@@ -104,7 +118,7 @@ simplifyDef cases = translateToCaseExpr' cases
 translateToCaseExpr' :: (Context m) => [([Expr], Expr)] -> m ([Name], Expr)
 translateToCaseExpr' cases = all_same_length cases >> do
   args <- get_args
-  let body' = Match (go_args args) (go_casePatterns cases)
+  let body' = Match (go_args args) (go_casePattern cases)
   return (args, body')
 
   where
@@ -113,38 +127,13 @@ translateToCaseExpr' cases = all_same_length cases >> do
     get_argLen []              = 0
     get_argLen ((args, _) : _) = length args
 
-    go_args         = Tuple . fmap Identifier
-    go_casePatterns = fmap (first Tuple)
+    go_args        = Tuple . fmap Identifier
+    go_casePattern = fmap (first Tuple)
 
     all_same_length [] = return []
     all_same_length (x : xs)
       | all (\y -> length x == length y) xs = all_same_length xs
       | otherwise = fail "Let bindings with different amount of arguments"
-
--- Declarations
-
-desugarDecl :: (Context m) => Decl -> m CoreExpr
-desugarDecl d = desugarDecl' d >>= desugarBlockExprs
-
-desugarDecl' :: (Context m) => Decl -> m [Expr]
-desugarDecl' (Module _ body) = concat <$> traverse go_body body
-  where
-    go_body (Decl d) = desugarDecl' d
-    go_body (Expr e) = return [e]
-
-desugarDecl' (Record constr fields) =
-  bindConstructor constr go_constrTy >> (constructor :) <$> accessors
-  where
-    constructor =
-      Def constr [(Identifier <$> fields, Tuple (Identifier <$> fields))]
-    accessors = traverse generateAccessor fields
-    generateAccessor name = do
-      arg <- generateUniqueName
-      return $ Def
-        name
-        [([Identifier arg], Identifier arg `Call` [fieldExtractor name])]
-    fieldExtractor = Lambda fields . Identifier
-    go_constrTy    = foldr (:~>) (NominalTy constr) (AnyTy <$ fields)
 
 -- Helper functions
 
@@ -181,26 +170,25 @@ desugarBlockExprs es = do
     desugarBlockExprs' (Let arg body : xs) = do
       body'   <- desugarExpr body
       context <- desugarBlockExprs' xs
-      arg'    <- go_casePattern arg
+      arg'    <- desugarCasePattern arg
       return $ Case body' [(arg', context)]
-      where
-        go_casePattern Underscore          = return DefaultP
-        go_casePattern (BoolLiteral   x  ) = return $ LitP $ Bool x
-        go_casePattern (NumberLiteral x  ) = return $ LitP $ Int x
-        go_casePattern (Identifier    x  ) = return $ VarP x
-        go_casePattern (Constructor   x  ) = flip ConstrP [] <$> go_constrTy x
-        go_casePattern (Tuple es') = TupleP <$> traverse go_casePattern es'
-        go_casePattern (Call (Identifier constr) es') =
-          liftA2 ConstrP (go_constrTy constr) (traverse go_casePattern es')
-        go_casePattern (BinOp op lhs rhs) =
-          liftA2 ConstrP (go_constrTy op) (traverse go_casePattern [lhs, rhs])
-        go_casePattern e =
-          fail $ "Unsupported pattern match expr '" ++ show e ++ "'"
-
-        go_constrTy = lookupConstructor
 
     desugarBlockExprs' (x : xs) = do
       sideEffect  <- desugarExpr x
       context     <- desugarBlockExprs xs
       throwawayId <- generateUniqueName
       return $ (throwawayId, sideEffect) `Bind` context
+
+desugarCasePattern :: (Context m) => Expr -> m Pattern
+desugarCasePattern Underscore          = return DefaultP
+desugarCasePattern (BoolLiteral   x  ) = return $ LitP $ Bool x
+desugarCasePattern (NumberLiteral x  ) = return $ LitP $ Int x
+desugarCasePattern (Identifier    x  ) = return $ VarP x
+desugarCasePattern (Constructor   x  ) = flip ConstrP [] <$> lookupConstructor x
+desugarCasePattern (Tuple es') = TupleP <$> traverse desugarCasePattern es'
+desugarCasePattern (Call (Identifier constr) es') =
+  liftA2 ConstrP (lookupConstructor constr) (traverse desugarCasePattern es')
+desugarCasePattern (BinOp op lhs rhs) =
+  liftA2 ConstrP (lookupConstructor op) (traverse desugarCasePattern [lhs, rhs])
+desugarCasePattern e =
+  fail $ "Unsupported pattern match expr '" ++ show e ++ "'"
