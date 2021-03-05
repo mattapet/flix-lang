@@ -10,10 +10,9 @@ import           Control.Applicative            ( liftA2
                                                 , liftA3
                                                 )
 import           Control.Monad                  ( (>=>) )
-import           Data.List                      ( intercalate
-                                                , intersect
-                                                )
+import           Data.List                      ( intersect )
 import           Flix.Capabilities
+import           Flix.Renamer.Errors            ( uniqueNameError )
 import           Flix.Syntax
 
 type Renaming m = (MonadFail m, ModuleRegistry m, SymbolAliasRegistry m)
@@ -48,10 +47,11 @@ renameExpr val@NumberLiteral{}  = return val
 renameExpr val@CharLiteral{}    = return val
 renameExpr val@StringLiteral{}  = return val
 renameExpr (OperatorCapture x ) = OperatorCapture <$> renameName x
-renameExpr (ListLiteral     xs) = ListLiteral <$> traverse renameExpr xs
-renameExpr (Tuple           xs) = Tuple <$> traverse renameExpr xs
 renameExpr (Identifier      x ) = Identifier <$> renameName x
 renameExpr (Constructor     x ) = Constructor <$> renameName x
+
+renameExpr (Tuple           xs) = Tuple <$> traverse renameExpr xs
+renameExpr (ListLiteral     xs) = ListLiteral <$> traverse renameExpr xs
 
 renameExpr (BinOp op lhs rhs) =
   liftA3 BinOp (renameName op) (renameExpr lhs) (renameExpr rhs)
@@ -96,10 +96,10 @@ renameExpr (Match value caseExprs) = do
 
 -- Helper functions
 
-renameName :: Renaming m => Name -> m Name
+renameName :: SymbolAliasRegistry m => Name -> m Name
 renameName = lookupSymbolAlias
 
-introduceVariables :: Renaming m => [Name] -> m [Name]
+introduceVariables :: (SymbolAliasRegistry m, MonadFail m) => [Name] -> m [Name]
 introduceVariables = uniq >=> traverse registerSymbol
 
 collectVariables :: Expr -> [Name]
@@ -107,18 +107,12 @@ collectVariables (Identifier x) = [x]
 collectVariables (Tuple      t) = foldMap collectVariables t
 collectVariables _              = []
 
-uniq :: Renaming m => [Name] -> m [Name]
+uniq :: MonadFail m => [Name] -> m [Name]
 uniq names = case collect_conflictingNames names [] of
   []        -> return names
-  conflicts -> fail $ formatConflicts conflicts
+  conflicts -> fail $ uniqueNameError conflicts
   where
     collect_conflictingNames [] acc = acc
     collect_conflictingNames (x : xs) acc =
       collect_conflictingNames xs (acc ++ [x] `intersect` xs)
 
-formatConflicts :: [Name] -> String
-formatConflicts = wrapInMessage . sep . (quote <$>)
-  where
-    sep           = intercalate ", "
-    quote         = ("'" ++) . (++ "'")
-    wrapInMessage = ("Conflicting definition for symbols " ++)
